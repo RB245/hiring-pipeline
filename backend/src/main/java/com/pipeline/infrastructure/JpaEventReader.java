@@ -4,6 +4,7 @@ import com.pipeline.application.EventReader;
 import com.pipeline.domain.Actor;
 import com.pipeline.domain.StageEvent;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,12 @@ class JpaEventReader implements EventReader {
 
     JpaEventReader(StageEventJpaRepository events) {
         this.events = events;
+    }
+
+    @Override
+    public Optional<StageEvent> findByIdempotencyKey(UUID candidateId, String idempotencyKey) {
+        return events.findByCandidateIdAndIdempotencyKey(candidateId, idempotencyKey)
+                .map(JpaEventReader::toDomain);
     }
 
     @Override

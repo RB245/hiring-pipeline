@@ -18,7 +18,7 @@ public record Candidate(UUID id, Stage currentStage, Instant currentStageSince, 
      * place a {@code from_stage} of null is correct.
      */
     public static CandidateCreation register(UUID id, Actor actor, Clock clock) {
-        Instant now = clock.instant();
+        Instant now = EventTime.stamp(clock);
         Candidate candidate = new Candidate(id, Stage.APPLIED, now, Stage.APPLIED.bit());
         StageEvent firstEvent = new StageEvent(
                 id, null, Stage.APPLIED, Stage.APPLIED.entryEventType(), now, actor, null, null);

@@ -13,6 +13,7 @@ import com.pipeline.application.TransitionCandidate;
 import com.pipeline.domain.Actor;
 import com.pipeline.domain.Stage;
 import com.pipeline.domain.StageEvent;
+import com.pipeline.support.MutableClock;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
@@ -48,7 +49,7 @@ class ReadPathTest extends PersistenceTest {
         UUID applied = register("Applied Only");
         UUID screening = register("Moved To Screening");
         clock.advance(Duration.ofDays(1));
-        transitionCandidate.transition(screening, Stage.SCREENING, ACTOR, null, null);
+        transitionCandidate.transition(screening, null, Stage.SCREENING, ACTOR, null, null);
 
         List<BoardColumn> board = reader.board(jobId);
 
@@ -76,11 +77,11 @@ class ReadPathTest extends PersistenceTest {
     void theTimelineIsAscendingBySeq() {
         UUID id = register("Priya Sharma");
         clock.advance(Duration.ofDays(1));
-        transitionCandidate.transition(id, Stage.SCREENING, ACTOR, null, null);
+        transitionCandidate.transition(id, null, Stage.SCREENING, ACTOR, null, null);
         clock.advance(Duration.ofDays(1));
-        transitionCandidate.transition(id, Stage.INTERVIEW, ACTOR, null, null);
+        transitionCandidate.transition(id, null, Stage.INTERVIEW, ACTOR, null, null);
         clock.advance(Duration.ofDays(1));
-        transitionCandidate.transition(id, Stage.REJECTED, ACTOR, "no offer", null);
+        transitionCandidate.transition(id, null, Stage.REJECTED, ACTOR, "no offer", null);
 
         assertThat(events.timeline(id))
                 .extracting(StageEvent::toStage)

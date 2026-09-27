@@ -11,6 +11,7 @@ import com.pipeline.db.SchemaFixture;
 import com.pipeline.domain.Actor;
 import com.pipeline.domain.Candidate;
 import com.pipeline.domain.Stage;
+import com.pipeline.support.MutableClock;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -42,11 +43,11 @@ class ProjectionRebuildTest extends PersistenceTest {
                 new CandidateProfile(jobId, "Priya Sharma", "priya@example.com", null, "referral"), ACTOR);
 
         clock.advance(Duration.ofDays(3));
-        transitionCandidate.transition(id, Stage.SCREENING, ACTOR, null, null);
+        transitionCandidate.transition(id, null, Stage.SCREENING, ACTOR, null, null);
         clock.advance(Duration.ofDays(4));
-        transitionCandidate.transition(id, Stage.INTERVIEW, ACTOR, null, null);
+        transitionCandidate.transition(id, null, Stage.INTERVIEW, ACTOR, null, null);
         clock.advance(Duration.ofDays(2));
-        transitionCandidate.transition(id, Stage.OFFER, ACTOR, null, null);
+        transitionCandidate.transition(id, null, Stage.OFFER, ACTOR, null, null);
 
         Instant truthfulSince = clock.instant();
         int truthfulMask =
@@ -71,7 +72,7 @@ class ProjectionRebuildTest extends PersistenceTest {
         UUID id = registerCandidate.register(
                 new CandidateProfile(jobId, "Rahul Verma", "rahul@example.com", null, null), ACTOR);
         clock.advance(Duration.ofDays(1));
-        transitionCandidate.transition(id, Stage.SCREENING, ACTOR, null, null);
+        transitionCandidate.transition(id, null, Stage.SCREENING, ACTOR, null, null);
 
         Candidate before = reader.load(id).orElseThrow();
         rebuild.rebuild(id);

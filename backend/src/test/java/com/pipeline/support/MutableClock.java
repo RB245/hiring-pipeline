@@ -1,4 +1,4 @@
-package com.pipeline.persistence;
+package com.pipeline.support;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -10,19 +10,19 @@ import java.time.ZoneOffset;
  * A clock the test drives. Needed because several of these tests turn on the order and
  * spacing of created_at, and a real clock would make that ordering incidental.
  */
-final class MutableClock extends Clock {
+public final class MutableClock extends Clock {
 
     private Instant now;
 
-    MutableClock(Instant now) {
+    public MutableClock(Instant now) {
         this.now = now;
     }
 
-    void advance(Duration by) {
+    public void advance(Duration by) {
         now = now.plus(by);
     }
 
-    void set(Instant instant) {
+    public void set(Instant instant) {
         now = instant;
     }
 

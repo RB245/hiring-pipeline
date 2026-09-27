@@ -1,6 +1,7 @@
 package com.pipeline.infrastructure;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -16,4 +17,6 @@ interface StageEventJpaRepository extends JpaRepository<StageEventEntity, Long> 
     int highestSeq(UUID candidateId);
 
     List<StageEventEntity> findByCandidateIdOrderBySeqAsc(UUID candidateId);
+
+    Optional<StageEventEntity> findByCandidateIdAndIdempotencyKey(UUID candidateId, String idempotencyKey);
 }

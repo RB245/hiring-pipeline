@@ -29,6 +29,16 @@ class JpaCandidateReader implements CandidateReader {
         return candidates.findById(candidateId).map(JpaCandidateReader::toDomain);
     }
 
+    @Override
+    public Optional<CandidateSummary> summary(UUID candidateId) {
+        return candidates.findById(candidateId).map(JpaCandidateReader::toSummary);
+    }
+
+    @Override
+    public List<UUID> allIds(UUID jobId) {
+        return candidates.idsForJob(jobId);
+    }
+
     /**
      * Grouped in memory on purpose. Rendering the board reads every candidate for the
      * job whatever happens, so a GROUP BY plus one query per column would be more round
@@ -75,6 +85,8 @@ class JpaCandidateReader implements CandidateReader {
                 entity.id,
                 entity.fullName,
                 entity.email,
+                entity.phone,
+                entity.source,
                 entity.currentStage,
                 entity.currentStageSince,
                 entity.createdAt);

@@ -11,6 +11,9 @@ interface CandidateJpaRepository extends JpaRepository<CandidateEntity, UUID> {
 
     List<CandidateEntity> findByJobIdOrderByCreatedAtDescIdDesc(UUID jobId);
 
+    @Query("select c.id from CandidateEntity c where c.jobId = :jobId order by c.createdAt")
+    List<UUID> idsForJob(UUID jobId);
+
     @Query("""
             select c from CandidateEntity c
             where c.jobId = :jobId

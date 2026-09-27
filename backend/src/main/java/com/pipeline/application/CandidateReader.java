@@ -18,8 +18,13 @@ public interface CandidateReader {
      */
     Optional<Candidate> load(UUID candidateId);
 
+    Optional<CandidateSummary> summary(UUID candidateId);
+
     List<BoardColumn> board(UUID jobId);
 
     /** Newest first. Pass a null cursor for the first page. */
     CandidatePage page(UUID jobId, Cursor after, int limit);
+
+    /** For the projection rebuild, which has to visit everyone. */
+    List<UUID> allIds(UUID jobId);
 }

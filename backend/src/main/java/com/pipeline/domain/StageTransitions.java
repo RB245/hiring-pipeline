@@ -32,7 +32,7 @@ public final class StageTransitions {
                 from,
                 target,
                 target.entryEventType(),
-                clock.instant(),
+                EventTime.stamp(clock),
                 actor,
                 reason,
                 idempotencyKey);

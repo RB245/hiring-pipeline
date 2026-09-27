@@ -20,6 +20,7 @@ import com.pipeline.domain.EventType;
 import com.pipeline.domain.IllegalStageTransitionException;
 import com.pipeline.domain.Stage;
 import com.pipeline.domain.StageEvent;
+import com.pipeline.support.MutableClock;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -76,7 +77,7 @@ class WritePathTest extends PersistenceTest {
         UUID id = register();
         clock.advance(Duration.ofDays(2));
 
-        transitionCandidate.transition(id, Stage.SCREENING, ACTOR, "good CV", "key-1");
+        transitionCandidate.transition(id, null, Stage.SCREENING, ACTOR, "good CV", "key-1");
 
         assertThat(events.timeline(id)).hasSize(2);
         Candidate loaded = reader.load(id).orElseThrow();
@@ -90,7 +91,7 @@ class WritePathTest extends PersistenceTest {
         UUID id = register();
 
         assertThatExceptionOfType(IllegalStageTransitionException.class)
-                .isThrownBy(() -> transitionCandidate.transition(id, Stage.OFFER, ACTOR, null, null));
+                .isThrownBy(() -> transitionCandidate.transition(id, null, Stage.OFFER, ACTOR, null, null));
 
         assertThat(events.timeline(id)).hasSize(1);
         assertThat(reader.load(id).orElseThrow().currentStage()).isEqualTo(Stage.APPLIED);
@@ -104,7 +105,7 @@ class WritePathTest extends PersistenceTest {
                 .when(writer)
                 .updateProjection(any(), any(), any(), anyInt());
 
-        assertThatThrownBy(() -> transitionCandidate.transition(id, Stage.SCREENING, ACTOR, null, null))
+        assertThatThrownBy(() -> transitionCandidate.transition(id, null, Stage.SCREENING, ACTOR, null, null))
                 .hasMessage("step 4 exploded");
 
         assertThat(events.timeline(id)).hasSize(1);
