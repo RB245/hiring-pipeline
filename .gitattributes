@@ -1,0 +1,12 @@
+# gradlew and shell scripts run inside the Linux image. If git checks them out
+# with CRLF on Windows, the Docker build dies with "bad interpreter: /bin/sh^M".
+* text=auto
+gradlew text eol=lf
+*.sh    text eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+*.jar binary
+*.png binary
+*.gif binary
+*.pdf binary

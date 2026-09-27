@@ -1,0 +1,14 @@
+.env
+
+# Backend
+backend/build/
+backend/.gradle/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+
+# IDE
+.idea/
+*.iml
+.vscode/

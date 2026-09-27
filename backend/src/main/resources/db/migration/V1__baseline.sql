@@ -1,0 +1,1 @@
+-- Baseline. Intentionally empty; real schema lands in the next migration.
