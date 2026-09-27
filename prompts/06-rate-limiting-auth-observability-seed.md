@@ -75,3 +75,13 @@ list.
 
 Before I send you my spec for it, tell me in a short paragraph how you would build that and how you would
 handle invalid input. I want your take before you see mine. Then stop and wait for me.
+
+- Carry-over from file 02
+
+`pipeline_app` has SELECT only on the `job` table, and that's deliberate: an app managing one opening has no
+business creating openings. So the seeder must not create the job through the application role. Insert it in
+a migration, or run the seeder under the migrator identity. Don't "fix" this by granting INSERT on `job` to
+`pipeline_app`.
+
+Candidates and events are different. The app role does hold INSERT on both, so seeding those through the
+application path is fine, and is arguably a better test of that path than raw SQL would be.

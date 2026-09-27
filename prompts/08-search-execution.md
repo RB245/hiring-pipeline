@@ -36,6 +36,26 @@ Pick a trigram similarity threshold and write down in a comment what you picked 
 actually finds `Priya Sharma`. I'd rather have a slightly loose threshold with good ranking than a tight one
 that drops typos, because missing the person entirely is the worse failure.
 
+Carry-over from file 02, so you don't rediscover this the hard way. Plain `similarity()` does not work for the
+motivating case: `'sharam' % 'Priya Sharma'` scores 0.25, under the 0.3 default, so it matches nothing. The
+measured answer is the word-similarity operator `%>` with `pg_trgm.word_similarity_threshold` at 0.5, which
+scores 0.571 and still uses the GIN index. The numbers are in V5's comments.
+
+What isn't settled is where that threshold gets set, and I want you to decide explicitly and tell me which you
+chose. It's a GUC, so it has to be in force on every connection that runs a search. Setting it at database
+level in a migration means every connection inherits it including Testcontainers; setting it in the pool's
+init SQL keeps it in application config but has to survive connection recycling. What I don't want is it being
+assumed, because an unset threshold makes search silently return nothing rather than error, which is the worst
+failure mode this feature could have. Write a test that proves the threshold is in force on a freshly opened
+connection.
+
+One more from file 02. The btree on `reached_mask` was removed because `&` isn't a searchable operator, so
+`reached:offer` is currently a seq scan (measured at 8.4ms against 50k rows, versus 11.3ms for the equivalent
+EXISTS pair). Fine for now. But note the option that wasn't considered: because the pipeline is linear, only
+about ten distinct `reached_mask` values ever occur, so `reached_mask = ANY(ARRAY[...])` over the enumerated
+matching masks is btree-searchable and would get an index scan. If `reached:` predicates show up hot in your
+EXPLAIN pass, that's the move. If they don't, leave it alone and say so.
+
 - Ranking
 
 Best matches first, and I want the formula written down rather than left to vibes:
