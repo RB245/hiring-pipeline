@@ -30,6 +30,12 @@ name: / bare   pg_trgm similarity with unaccent, levenshtein as a tiebreak for s
 Check the query plans. If `reached:offer` or `stage:interview in_stage_for:>7d` isn't using the indexes from
 file 02, tell me, because that means either the index set or the query shape is wrong.
 
+While you're in there, settle one thing left open in file 04. The unfiltered candidate list orders by
+`(created_at DESC, id DESC)` with no supporting index, deliberately, because file 02's rule is that every
+index names a recruiter question and "show me everyone" barely is one. Measure it at seed scale and at 50k
+and tell me the numbers. I'd rather the README said "measured, not worth it at this size" than quietly carry
+an index nobody justified — but if the sort is actually hurting, say so and add it.
+
 - Fuzzy matching
 
 Pick a trigram similarity threshold and write down in a comment what you picked and why. Make sure `sharam`
