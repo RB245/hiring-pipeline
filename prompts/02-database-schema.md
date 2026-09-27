@@ -88,3 +88,22 @@ Flyway migrates cleanly from empty. A Testcontainers test connects as the applic
 and then DELETE on `stage_event`, and asserts both fail. Another test inserts a violating row for each check
 constraint and asserts each is rejected. Use real Postgres, not H2, because most of this is Postgres-specific
 and H2 would let broken things pass.
+
+- Carry-overs from file 01
+
+A few things changed since you last saw the repo, so don't be surprised by them and don't undo them.
+
+I added a `.gitattributes` pinning `gradlew` to LF, and I marked `backend/gradlew` executable in git
+(`100755`). Both exist because the repo is authored on Windows but builds on Linux, in the image and in CI.
+Leave them alone.
+
+The gradle-wrapper.jar was bootstrapped from the gradle/gradle repo rather than generated locally, so while
+you're in the CI workflow add `gradle/actions/wrapper-validation`. That workflow currently only builds the
+backend; leave the frontend out of it for now.
+
+Leave `allowEmptyShould(true)` on the ArchUnit rules. This file adds no Java to `domain/`, so the rules still
+match zero classes and would fail without it. It comes off in file 03 — remind me if I forget.
+
+Docker is now working on this machine, so Testcontainers will actually run. Every acceptance check above is
+expected to execute, not be written and left unverified. If something can't run, say so plainly rather than
+reporting it as done.
