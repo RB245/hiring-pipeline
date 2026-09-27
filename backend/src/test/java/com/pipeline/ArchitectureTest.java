@@ -32,4 +32,13 @@ class ArchitectureTest {
             .that().resideInAPackage("..domain..")
             .should().dependOnClassesThat()
             .resideInAnyPackage("com.pipeline.infrastructure..", "com.pipeline.api..");
+
+    // The ports live in application and the adapters implement them, so the arrow runs
+    // inward. A use case reaching for a JPA repository would reverse it, and nothing
+    // else in the build would notice.
+    @ArchTest
+    static final ArchRule applicationDoesNotDependOnItsAdapters = noClasses()
+            .that().resideInAPackage("com.pipeline.application..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage("com.pipeline.infrastructure..", "com.pipeline.api..");
 }

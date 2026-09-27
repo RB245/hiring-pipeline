@@ -17,9 +17,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * rather than H2 because enums, partial indexes, generated columns, triggers and role
  * grants are the things under test and H2 would wave most of them through.
  */
-final class SchemaFixture {
+public final class SchemaFixture {
 
-    static final String APP_PASSWORD = "app-password";
+    public static final String APP_PASSWORD = "app-password";
     static final OffsetDateTime T0 = OffsetDateTime.of(2025, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC);
 
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
@@ -33,8 +33,13 @@ final class SchemaFixture {
                 .migrate();
     }
 
+    /** Shared with the persistence tests so the whole run needs only one container. */
+    public static String jdbcUrl() {
+        return POSTGRES.getJdbcUrl();
+    }
+
     /** The identity Flyway ran as: a member of pipeline_migrator, so it holds DDL. */
-    static Connection asOwner() throws SQLException {
+    public static Connection asOwner() throws SQLException {
         return DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
     }

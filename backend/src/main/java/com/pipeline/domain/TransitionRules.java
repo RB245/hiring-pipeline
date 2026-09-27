@@ -11,7 +11,7 @@ public final class TransitionRules {
 
     private final List<TransitionRule> rules;
 
-    private TransitionRules(List<TransitionRule> rules) {
+    public TransitionRules(List<TransitionRule> rules) {
         this.rules = List.copyOf(rules);
     }
 
