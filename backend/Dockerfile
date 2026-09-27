@@ -1,10 +1,16 @@
-FROM eclipse-temurin:21-jdk AS build
+# Gradle comes from the image rather than from the wrapper. The wrapper resolves its
+# distribution through a redirect to GitHub releases, which is not reachable from every
+# build network, and a container that cannot download Gradle cannot build at all.
+# Keep this tag in step with gradle/wrapper/gradle-wrapper.properties; CI still runs
+# ./gradlew, so the wrapper remains the version of record for everything except this.
+FROM gradle:8.14.3-jdk21 AS build
 WORKDIR /app
-COPY gradle gradle
-COPY gradlew settings.gradle.kts build.gradle.kts ./
-RUN chmod +x gradlew && ./gradlew --no-daemon dependencies
+# Dependencies resolve in their own layer so that editing a source file does not
+# re-download the world on every `docker compose up --build`.
+COPY settings.gradle.kts build.gradle.kts ./
+RUN gradle --no-daemon dependencies
 COPY src src
-RUN ./gradlew --no-daemon bootJar
+RUN gradle --no-daemon bootJar
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

@@ -3,14 +3,22 @@ spring:
     name: pipeline
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/pipeline}
-    username: ${DB_USER:pipeline}
-    password: ${DB_PASSWORD:pipeline}
+    # pipeline_app: SELECT/INSERT/UPDATE only, and no DDL. Created by V7.
+    username: ${DB_USER:pipeline_app}
+    password: ${DB_PASSWORD:pipeline_app}
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
   flyway:
     enabled: true
+    # Migrations run as a separate, privileged identity. If Flyway shared the
+    # application's connection the revokes in V7 would mean nothing, since the app
+    # could simply migrate the trigger away.
+    user: ${DB_MIGRATION_USER:pipeline}
+    password: ${DB_MIGRATION_PASSWORD:pipeline}
+    placeholders:
+      app_password: ${DB_PASSWORD:pipeline_app}
 
 management:
   endpoints:

@@ -11,6 +11,10 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+      # The wrapper jar was bootstrapped from the gradle/gradle repo rather than
+      # generated locally, so its checksum is worth confirming against the published
+      # one on every run.
+      - uses: gradle/actions/wrapper-validation@v4
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew build
         working-directory: backend

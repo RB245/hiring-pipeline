@@ -29,8 +29,10 @@ services:
     build: ./backend
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pipeline}
-      DB_USER: ${POSTGRES_USER:-pipeline}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-pipeline}
+      DB_USER: pipeline_app
+      DB_PASSWORD: ${APP_DB_PASSWORD:-pipeline_app}
+      DB_MIGRATION_USER: ${POSTGRES_USER:-pipeline}
+      DB_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD:-pipeline}
     ports:
       - "8080:8080"
     depends_on:
