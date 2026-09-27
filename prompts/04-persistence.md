@@ -74,3 +74,28 @@ will have its own approach.
 A transition writes exactly one event and updates all three projection columns atomically. The rollback test
 proves no orphaned events. The rebuild test proves the projection can be reconstructed from the log. Keyset
 pagination returns stable pages when rows are inserted between requests, and there's a test showing that.
+
+- Carry-overs from file 03
+
+Two things to deal with before the main work.
+
+First, the gap you flagged: the initial APPLIED event has no home. It isn't a transition, there's no origin
+stage, so nothing in the domain produces it. Give candidate creation its own entry point here, and treat it as
+the one place `from_stage IS NULL` and `seq = 1` are written together. It needs the same transactional
+guarantee as a transition: the candidate row and its first event are one atomic write or neither happens.
+Write the test that proves a failed candidate creation leaves no event behind, and one that proves the V4
+check constraint rejects a second event with `from_stage IS NULL`.
+
+Second, `TransitionRule` is `sealed` and I want that dropped. You were half right that it's inert, but the
+sharper problem is a contradiction: `TransitionRules` composes rules from a list and its comment says a new
+kind of move is a new rule rather than an edit to an existing one, while `sealed` says no new rule can exist
+outside that one file. Those can't both be the design. Keep the list-based composition, because deriving
+`legalTargets` by filtering `Stage.values()` through `isLegal` is the good part and means the alternatives in
+the error can never drift from the rules. Drop `sealed`, and give `TransitionRules` a public constructor
+taking a rule list alongside `standard()`. That's a one-word change plus one constructor, not a rewrite.
+
+While you're there: the README will eventually claim "adding a stage means an enum constant and a rule". That
+claim is false as written, because a new stage also needs a Postgres enum value in a migration, a
+`reached_mask` bit, and a board column in the frontend. Don't test that claim. Test the one that's true, that
+a new kind of *move* needs no edit to any existing rule, and tell me what the honest version of the sentence
+is so I can put it in the README rather than something I'd have to walk back.
