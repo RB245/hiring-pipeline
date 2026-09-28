@@ -19,8 +19,12 @@ public sealed interface ResolvedValue {
 
     record StatusValue(Status status) implements ResolvedValue {}
 
-    /** Fuzzy text: a name, or a bare term that will be matched against name and email. */
-    record TextValue(String text) implements ResolvedValue {}
+    /**
+     * Fuzzy text. {@code alsoEmail} is the whole difference between a bare word, which
+     * identifies a person by any of the ways she is written down, and {@code name:},
+     * which means the name and only the name.
+     */
+    record TextValue(String text, boolean alsoEmail) implements ResolvedValue {}
 
     /** The literal is kept alongside the instant so {@code /explain} can show its working. */
     record DateValue(String literal, Instant instant) implements ResolvedValue {}

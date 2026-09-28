@@ -20,11 +20,18 @@ import org.hibernate.type.SqlTypes;
  * Immutable so Hibernate never generates an UPDATE for it. That is a fourth line of
  * defence rather than the real one: the V6 trigger and the V7 revoke both stop a write
  * this annotation merely never attempts.
+ *
+ * <p>Public, alone among the entities, because {@code moved_to:} is a question about the
+ * log rather than about the projection and the Criteria API needs a class to root a
+ * subquery on. Wrapping the EXISTS in a SQL function to avoid that was tried and
+ * measured: the planner will not inline it, so a semi-join that costs 24ms against 50k
+ * rows becomes a per-row function call costing 609ms. Its fields stay package-private —
+ * the search layer names columns, not members.
  */
 @Entity
 @Table(name = "stage_event")
 @Immutable
-class StageEventEntity {
+public class StageEventEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

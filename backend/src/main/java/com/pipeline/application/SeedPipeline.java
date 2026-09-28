@@ -180,10 +180,16 @@ public class SeedPipeline implements ApplicationRunner {
             steps.add(new Step(Stage.SCREENING, base.minus(Duration.ofDays(8 + index)), "CV looks relevant"));
         } else if (index < 15) {
             // Moved to Interview inside the last three days.
+            //
+            // Spread over 12 to 48 hours rather than 12 to 60, because the base is midnight
+            // today and the guarantee is relative to now. At a 60-hour offset the oldest of
+            // these is 60 hours before midnight, which is more than three days ago for any
+            // run after noon — so the promise this comment makes held only in the morning.
+            // Capped at 48, the whole group stays inside three days at every hour of the day.
             steps.add(new Step(Stage.APPLIED, base.minus(Duration.ofDays(30)), null));
             steps.add(new Step(Stage.SCREENING, base.minus(Duration.ofDays(12)), "Good CV"));
             steps.add(new Step(
-                    Stage.INTERVIEW, base.minus(Duration.ofHours(12L + (index - 10) * 12L)), "Strong screen"));
+                    Stage.INTERVIEW, base.minus(Duration.ofHours(12L + (index - 10) * 9L)), "Strong screen"));
         } else if (index < 21) {
             // Reached Offer and was then rejected.
             steps.add(new Step(Stage.APPLIED, base.minus(Duration.ofDays(70)), null));

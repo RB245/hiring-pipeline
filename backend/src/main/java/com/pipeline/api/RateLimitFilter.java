@@ -83,7 +83,24 @@ class RateLimitFilter extends OncePerRequestFilter {
 
     private static RateLimitTier tierOf(HttpServletRequest request) {
         String method = request.getMethod();
-        return "GET".equals(method) || "HEAD".equals(method) ? RateLimitTier.READ : RateLimitTier.WRITE;
+        if (!"GET".equals(method) && !"HEAD".equals(method)) {
+            return RateLimitTier.WRITE;
+        }
+        return isSearch(request) ? RateLimitTier.SEARCH : RateLimitTier.READ;
+    }
+
+    /**
+     * By what the request does, not by where it is mapped. A search reaches the API two
+     * ways — its own endpoints, and a q= on the candidates list — and both cost a trigram
+     * scan, so tiering only the tidy-looking one would leave the expensive path on the
+     * 300/min read bucket.
+     *
+     * <p>getParameter is safe to call here because this only runs for GET and HEAD. On a
+     * POST it would read the body to look for form parameters, and the controller would
+     * then find nothing left to parse.
+     */
+    private static boolean isSearch(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/api/v1/search/") || request.getParameter("q") != null;
     }
 
     /** By key where there is one, by address otherwise, so an anonymous caller is still bounded. */

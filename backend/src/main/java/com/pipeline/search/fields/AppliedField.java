@@ -5,7 +5,12 @@ import com.pipeline.search.FieldHandler;
 import com.pipeline.search.Node;
 import com.pipeline.search.Operator;
 import com.pipeline.search.ResolvedValue;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import org.springframework.stereotype.Component;
@@ -32,6 +37,18 @@ class AppliedField implements FieldHandler {
     public ResolvedValue resolve(Node.Value value, Operator operator, Clock clock) {
         Operator effective = operator == Operator.EQUALS ? Operator.LESS_OR_EQUAL : operator;
         return new ResolvedValue.AgeValue(effective, value.text(), Durations.threshold(value, clock));
+    }
+
+    /**
+     * On created_at, and with no {@code NOT is_terminal} companion: unlike time-in-stage,
+     * when somebody applied stays true after they are hired or rejected. There is no index
+     * behind this one and V5 does not offer it a question of its own; it is nearly always
+     * written alongside a filter that does have one.
+     */
+    @Override
+    public Predicate predicate(
+            ResolvedValue value, Root<?> candidate, CriteriaQuery<?> query, CriteriaBuilder builder) {
+        return Ages.matching((ResolvedValue.AgeValue) value, candidate.<Instant>get("createdAt"), builder);
     }
 
     @Override

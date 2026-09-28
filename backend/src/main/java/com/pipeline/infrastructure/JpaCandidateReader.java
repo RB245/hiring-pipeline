@@ -80,7 +80,8 @@ class JpaCandidateReader implements CandidateReader {
         return new Candidate(entity.id, entity.currentStage, entity.currentStageSince, entity.reachedMask);
     }
 
-    private static CandidateSummary toSummary(CandidateEntity entity) {
+    /** Shared with {@link JpaCandidateSearch}, which reads the same rows down a different query. */
+    static CandidateSummary toSummary(CandidateEntity entity) {
         return new CandidateSummary(
                 entity.id,
                 entity.fullName,

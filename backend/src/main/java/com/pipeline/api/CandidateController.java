@@ -9,6 +9,7 @@ import com.pipeline.application.EventReader;
 import com.pipeline.application.JobReader;
 import com.pipeline.application.NoJobConfiguredException;
 import com.pipeline.application.RegisterCandidate;
+import com.pipeline.application.SearchCandidates;
 import com.pipeline.application.TransitionCandidate;
 import com.pipeline.application.TransitionOutcome;
 import io.swagger.v3.oas.annotations.Operation;
@@ -44,6 +45,7 @@ class CandidateController {
     private final RegisterCandidate registerCandidate;
     private final TransitionCandidate transitionCandidate;
     private final CandidateReader candidates;
+    private final SearchCandidates search;
     private final EventReader events;
     private final JobReader jobs;
     private final CurrentActor actor;
@@ -53,6 +55,7 @@ class CandidateController {
             RegisterCandidate registerCandidate,
             TransitionCandidate transitionCandidate,
             CandidateReader candidates,
+            SearchCandidates search,
             EventReader events,
             JobReader jobs,
             CurrentActor actor,
@@ -60,6 +63,7 @@ class CandidateController {
         this.registerCandidate = registerCandidate;
         this.transitionCandidate = transitionCandidate;
         this.candidates = candidates;
+        this.search = search;
         this.events = events;
         this.jobs = jobs;
         this.actor = actor;
@@ -77,16 +81,51 @@ class CandidateController {
     }
 
     @GetMapping
-    @Operation(summary = "List candidates, newest first, paged by cursor rather than offset")
+    @Operation(
+            summary = "List candidates, newest first, or search them with ?q=",
+            description =
+                    """
+                    Without q, the whole pipeline newest first. With q, whatever matches, best first,
+                    each result carrying its score and the conditions it met.
+
+                    Both are keyset-paged, but they are ordered by different keys, so a cursor from one
+                    is not a cursor for the other and will be rejected rather than silently paging
+                    through the wrong ordering.
+
+                    A search that matches nobody comes back with suggestions naming which single
+                    condition to drop and how many candidates that would find.
+                    """)
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "A page of candidates"),
+        @ApiResponse(responseCode = "422", description = "q could not be parsed; body carries the span to underline")
+    })
     CandidatePageResponse list(
+            @Parameter(description = "Natural language or DSL", example = "stage:interview in_stage_for:>7d")
+                    @RequestParam(required = false)
+                    String q,
             @Parameter(description = "Opaque token from a previous page's nextCursor") @RequestParam(required = false)
                     String cursor,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit) {
+
         UUID jobId = jobs.singleJobId().orElseThrow(NoJobConfiguredException::new);
+        if (q != null && !q.isBlank()) {
+            return search(jobId, q, cursor, limit);
+        }
+
         CandidatePage page = candidates.page(jobId, cursor == null ? null : CursorCodec.decode(cursor), limit);
-        return new CandidatePageResponse(
+        return CandidatePageResponse.list(
                 page.candidates().stream().map(summary -> CandidateResponse.of(summary, clock)).toList(),
                 page.next() == null ? null : CursorCodec.encode(page.next()));
+    }
+
+    private CandidatePageResponse search(UUID jobId, String q, String cursor, int limit) {
+        SearchCandidates.Results results =
+                search.search(jobId, q, cursor == null ? null : CursorCodec.decodeSearch(cursor), limit);
+        return CandidatePageResponse.search(
+                results.hits().stream().map(hit -> CandidateResponse.of(hit, clock)).toList(),
+                results.next() == null ? null : CursorCodec.encode(results.next()),
+                results.query().dsl(),
+                results.suggestions());
     }
 
     @GetMapping("/{id}")

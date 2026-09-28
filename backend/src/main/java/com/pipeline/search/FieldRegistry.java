@@ -22,8 +22,10 @@ public class FieldRegistry {
 
     private final Map<String, FieldHandler> handlers = new TreeMap<>();
     private final Set<String> modifierFields = new HashSet<>();
+    private final FieldHandler bareTermHandler;
 
     public FieldRegistry(List<FieldHandler> handlers) {
+        FieldHandler claimant = null;
         for (FieldHandler handler : handlers) {
             FieldHandler clash = this.handlers.put(handler.field(), handler);
             if (clash != null) {
@@ -31,7 +33,15 @@ public class FieldRegistry {
                         + clash.getClass().getName() + " and " + handler.getClass().getName());
             }
             modifierFields.addAll(handler.modifiers());
+            if (handler.bareTerm("probe").isPresent()) {
+                if (claimant != null) {
+                    throw new IllegalStateException("Two handlers claim bare terms: "
+                            + claimant.getClass().getName() + " and " + handler.getClass().getName());
+                }
+                claimant = handler;
+            }
         }
+        this.bareTermHandler = claimant;
     }
 
     public Optional<FieldHandler> find(String field) {
@@ -46,5 +56,14 @@ public class FieldRegistry {
     /** Fields that only mean something attached to another one, such as {@code since}. */
     public boolean isModifier(String field) {
         return modifierFields.contains(field);
+    }
+
+    /**
+     * The field a bare word falls through to. Absent only in a registry assembled without
+     * one, which the parser tests do; the running application always has a claimant, and
+     * the builder says so rather than quietly dropping the term.
+     */
+    public Optional<FieldHandler> bareTermHandler() {
+        return Optional.ofNullable(bareTermHandler);
     }
 }

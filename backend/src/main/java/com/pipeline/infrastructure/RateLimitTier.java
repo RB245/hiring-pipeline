@@ -10,6 +10,6 @@ public enum RateLimitTier {
     WRITE,
     /** Board, list, detail, timeline. */
     READ,
-    /** Nothing routes here yet; the query parser in files 07 and 08 will. */
+    /** Anything that parses a query and scans for matches: /search/*, and the list with a q=. */
     SEARCH
 }
