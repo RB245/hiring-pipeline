@@ -1,0 +1,293 @@
+# Input, the canonical DSL it normalises to, and the validated AST.
+#
+# The AST prints resolved values, so a row proves the validator ran, and prints date and
+# duration literals rather than instants, so the file survives the fixed clock moving.
+# Blocks are separated by blank lines; # starts a comment.
+#
+# ---------------------------------------------------------------------------------------
+# The eight acceptance rows from prompts/07, verbatim.
+# ---------------------------------------------------------------------------------------
+
+in:  Find Priya Sharma
+dsl: name:"priya sharma"
+ast: (name = "priya sharma")
+
+in:  sharam
+dsl: sharam
+ast: (term sharam)
+
+in:  Who's in Interview right now?
+dsl: stage:interview
+ast: (stage = interview)
+
+in:  Who has been stuck in Screening for more than a week?
+dsl: stage:screening in_stage_for:>7d
+ast: (and (stage = screening) (in_stage_for > 7d))
+
+in:  Who moved to Interview since Monday?
+dsl: moved_to:interview since:monday
+ast: (moved_to = interview since monday)
+
+in:  Who reached the Offer stage but didn't get hired?
+dsl: reached:offer -status:hired
+ast: (and (reached = offer) (not (status = hired)))
+
+in:  Everyone except rejected candidates
+dsl: -status:rejected
+ast: (not (status = rejected))
+
+in:  stage:interview in_stage_for:>3d -status:rejected
+dsl: stage:interview in_stage_for:>3d -status:rejected
+ast: (and (stage = interview) (in_stage_for > 3d) (not (status = rejected)))
+
+# ---------------------------------------------------------------------------------------
+# DSL in, DSL out. Nothing here may be rewritten.
+# ---------------------------------------------------------------------------------------
+
+in:  stage:interview
+dsl: stage:interview
+ast: (stage = interview)
+
+in:  stage=interview
+dsl: stage:interview
+ast: (stage = interview)
+
+in:  STAGE:interview
+dsl: stage:interview
+ast: (stage = interview)
+
+in:  stage:Interview
+dsl: stage:Interview
+ast: (stage = interview)
+
+in:  reached:offer
+dsl: reached:offer
+ast: (reached = offer)
+
+in:  moved_to:hired
+dsl: moved_to:hired
+ast: (moved_to = hired)
+
+in:  status:active
+dsl: status:active
+ast: (status = active)
+
+in:  status:hired
+dsl: status:hired
+ast: (status = hired)
+
+in:  in_stage_for:>7d
+dsl: in_stage_for:>7d
+ast: (in_stage_for > 7d)
+
+in:  in_stage_for:>=2w
+dsl: in_stage_for:>=2w
+ast: (in_stage_for >= 2w)
+
+in:  in_stage_for:<3mo
+dsl: in_stage_for:<3mo
+ast: (in_stage_for < 3mo)
+
+in:  in_stage_for:7d
+dsl: in_stage_for:7d
+ast: (in_stage_for >= 7d)
+
+in:  in_stage_for>7d
+dsl: in_stage_for:>7d
+ast: (in_stage_for > 7d)
+
+in:  applied:<30d
+dsl: applied:<30d
+ast: (applied < 30d)
+
+in:  applied:>3mo
+dsl: applied:>3mo
+ast: (applied > 3mo)
+
+in:  name:"priya sharma"
+dsl: name:"priya sharma"
+ast: (name = "priya sharma")
+
+in:  name:sharma
+dsl: name:sharma
+ast: (name = "sharma")
+
+in:  name:"sharma"
+dsl: name:sharma
+ast: (name = "sharma")
+
+in:  name:o'brien
+dsl: name:o'brien
+ast: (name = "o'brien")
+
+in:  jean-luc
+dsl: jean-luc
+ast: (term jean-luc)
+
+in:  priya@example.com
+dsl: priya@example.com
+ast: (term priya@example.com)
+
+# ---------------------------------------------------------------------------------------
+# Connectives. Whitespace is AND; comma, OR and or are the same operator.
+# ---------------------------------------------------------------------------------------
+
+in:  stage:interview sharma
+dsl: stage:interview sharma
+ast: (and (stage = interview) (term sharma))
+
+in:  sharma priya
+dsl: sharma priya
+ast: (and (term sharma) (term priya))
+
+in:  stage:interview and status:active
+dsl: stage:interview status:active
+ast: (and (stage = interview) (status = active))
+
+in:  stage:interview OR stage:offer
+dsl: stage:interview OR stage:offer
+ast: (or (stage = interview) (stage = offer))
+
+in:  stage:interview or stage:offer
+dsl: stage:interview OR stage:offer
+ast: (or (stage = interview) (stage = offer))
+
+in:  stage:interview, stage:offer
+dsl: stage:interview OR stage:offer
+ast: (or (stage = interview) (stage = offer))
+
+in:  stage:screening OR stage:interview, stage:offer
+dsl: stage:screening OR stage:interview OR stage:offer
+ast: (or (stage = screening) (stage = interview) (stage = offer))
+
+in:  -status:rejected
+dsl: -status:rejected
+ast: (not (status = rejected))
+
+in:  not status:rejected
+dsl: -status:rejected
+ast: (not (status = rejected))
+
+in:  NOT status:rejected
+dsl: -status:rejected
+ast: (not (status = rejected))
+
+in:  except status:rejected
+dsl: -status:rejected
+ast: (not (status = rejected))
+
+in:  stage:offer -name:sharma
+dsl: stage:offer -name:sharma
+ast: (and (stage = offer) (not (name = "sharma")))
+
+in:  (stage:offer)
+dsl: stage:offer
+ast: (stage = offer)
+
+in:  (stage:interview OR stage:offer) status:active
+dsl: (stage:interview OR stage:offer) status:active
+ast: (and (or (stage = interview) (stage = offer)) (status = active))
+
+in:  -(stage:offer status:hired)
+dsl: -(stage:offer status:hired)
+ast: (not (and (stage = offer) (status = hired)))
+
+in:  stage:interview in_stage_for:>7d -status:rejected name:sharma
+dsl: stage:interview in_stage_for:>7d -status:rejected name:sharma
+ast: (and (stage = interview) (in_stage_for > 7d) (not (status = rejected)) (name = "sharma"))
+
+# ---------------------------------------------------------------------------------------
+# Modifiers. since and before fold into the moved_to they sit beside.
+# ---------------------------------------------------------------------------------------
+
+in:  moved_to:offer since:monday
+dsl: moved_to:offer since:monday
+ast: (moved_to = offer since monday)
+
+in:  moved_to:offer since:monday before:today
+dsl: moved_to:offer since:monday before:today
+ast: (moved_to = offer since monday before today)
+
+in:  moved_to:offer since:2025-03-01
+dsl: moved_to:offer since:2025-03-01
+ast: (moved_to = offer since 2025-03-01)
+
+in:  moved_to:offer since:"last monday"
+dsl: moved_to:offer since:"last monday"
+ast: (moved_to = offer since last monday)
+
+in:  moved_to:offer since:"this week"
+dsl: moved_to:offer since:"this week"
+ast: (moved_to = offer since this week)
+
+in:  moved_to:offer since:yesterday stage:offer
+dsl: moved_to:offer since:yesterday stage:offer
+ast: (and (moved_to = offer since yesterday) (stage = offer))
+
+# ---------------------------------------------------------------------------------------
+# Sentences.
+# ---------------------------------------------------------------------------------------
+
+in:  Who is in Offer?
+dsl: stage:offer
+ast: (stage = offer)
+
+in:  Show me everyone in Interview
+dsl: stage:interview
+ast: (stage = interview)
+
+in:  who's stuck in Interview for 3 days
+dsl: stage:interview in_stage_for:>=3d
+ast: (and (stage = interview) (in_stage_for >= 3d))
+
+in:  people stuck in Screening for at least two weeks
+dsl: stage:screening in_stage_for:>=14d
+ast: (and (stage = screening) (in_stage_for >= 14d))
+
+in:  candidates in Offer for less than a month
+dsl: stage:offer in_stage_for:<1mo
+ast: (and (stage = offer) (in_stage_for < 1mo))
+
+in:  Who applied in the last 30 days?
+dsl: applied:<30d
+ast: (applied < 30d)
+
+in:  Who applied more than 3 months ago?
+dsl: applied:>3mo
+ast: (applied > 3mo)
+
+in:  Who moved to Offer since last Monday?
+dsl: moved_to:offer since:"last monday"
+ast: (moved_to = offer since last monday)
+
+in:  Who moved to Hired before today?
+dsl: moved_to:hired before:today
+ast: (moved_to = hired before today)
+
+in:  Who has been in Offer?
+dsl: reached:offer
+ast: (reached = offer)
+
+in:  who reached Hired
+dsl: reached:hired
+ast: (reached = hired)
+
+in:  Everyone who was hired
+dsl: status:hired
+ast: (status = hired)
+
+in:  active candidates in Screening
+dsl: status:active stage:screening
+ast: (and (status = active) (stage = screening))
+
+in:  rejected
+dsl: status:rejected
+ast: (status = rejected)
+
+in:  Priya
+dsl: Priya
+ast: (term Priya)
+
+in:  name:"priya sharma" OR name:"raj kumar"
+dsl: name:"priya sharma" OR name:"raj kumar"
+ast: (or (name = "priya sharma") (name = "raj kumar"))

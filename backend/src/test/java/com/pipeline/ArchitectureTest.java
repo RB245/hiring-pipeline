@@ -1,11 +1,14 @@
 package com.pipeline;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.pipeline.search.FieldHandler;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import org.springframework.stereotype.Component;
 
 /**
  * Production code only. A test for a domain class is entitled to use JUnit and AssertJ;
@@ -32,6 +35,21 @@ class ArchitectureTest {
             .that().resideInAPackage("..domain..")
             .should().dependOnClassesThat()
             .resideInAnyPackage("com.pipeline.infrastructure..", "com.pipeline.api..");
+
+    // The open/closed claim the search design rests on, enforced rather than asserted in
+    // a comment: if the normaliser, lexer, parser or validator ever reached for a handler,
+    // adding a searchable field would stop being one new class.
+    @ArchTest
+    static final ArchRule theQueryPipelineKnowsNoFieldByName = noClasses()
+            .that().resideInAPackage("com.pipeline.search")
+            .should().dependOnClassesThat().resideInAPackage("com.pipeline.search.fields..");
+
+    // The other half of it: a handler nobody registered is a field that silently does not
+    // exist, and the query would fail with "no such field" rather than at startup.
+    @ArchTest
+    static final ArchRule everyFieldHandlerIsRegistered = classes()
+            .that().implement(FieldHandler.class)
+            .should().beAnnotatedWith(Component.class);
 
     // The ports live in application and the adapters implement them, so the arrow runs
     // inward. A use case reaching for a JPA repository would reverse it, and nothing

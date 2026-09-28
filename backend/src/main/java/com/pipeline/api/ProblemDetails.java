@@ -5,7 +5,9 @@ import com.pipeline.application.NoJobConfiguredException;
 import com.pipeline.application.StaleCandidateStateException;
 import com.pipeline.domain.IllegalStageTransitionException;
 import com.pipeline.domain.Stage;
+import com.pipeline.search.SearchQueryException;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
@@ -79,6 +81,25 @@ class ProblemDetails extends ResponseEntityExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(problem(HttpStatus.BAD_REQUEST, "malformed-cursor", "Malformed cursor",
                         e.getMessage(), request));
+    }
+
+    /**
+     * A query that cannot be answered, carrying the part of it that is wrong. The spans
+     * are what let the search box underline the offending characters rather than clear
+     * itself and say "invalid": {@code source} indexes the text she typed, {@code span}
+     * the normalised DSL that {@code /explain} shows her.
+     */
+    @ExceptionHandler(SearchQueryException.class)
+    ResponseEntity<ProblemDetail> badQuery(SearchQueryException e, HttpServletRequest request) {
+        ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, e.code().slug(), "Cannot run that search",
+                e.getMessage(), request);
+        problem.setProperty("code", e.code().name());
+        problem.setProperty("span", List.of(e.source().start(), e.source().end()));
+        problem.setProperty("normalisedSpan", List.of(e.span().start(), e.span().end()));
+        if (!e.didYouMean().isEmpty()) {
+            problem.setProperty("didYouMean", e.didYouMean());
+        }
+        return ResponseEntity.unprocessableEntity().body(problem);
     }
 
     @ExceptionHandler(NoJobConfiguredException.class)
