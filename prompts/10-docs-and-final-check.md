@@ -74,11 +74,46 @@ table since file 02.
 It should take creating one new `FieldHandler` class and registering it. Nothing else. No changes to the
 lexer, the parser, the validator, or the service.
 
-If it turns out you need to touch any of those, tell me instead of quietly doing it. That means the design
-failed the open/closed test, and I'd rather find out now and fix it than ship it and claim otherwise in the
-README.
+You ran a version of this early, in file 07, and it passed. That only proved a new field *parses*. Since
+file 08 a handler also has to build a Criteria predicate, so this time run it end to end: type
+`source:referral` into the search box and get the right people back, through parse, SQL and HTTP. Passing at
+the parser boundary is not the claim the README will make.
+
+If it turns out you need to touch the lexer, parser, validator or service, tell me instead of quietly doing
+it. That means the design failed the open/closed test, and I'd rather find out now than ship it and claim
+otherwise.
+
+- The material worth writing up
+
+This project accumulated better stories than "it works". Don't bury these.
+
+Three checks were found to be structurally incapable of failing: an ArchUnit rule matching zero classes, a
+fixed test clock sitting on a whole second so truncation had nothing to truncate, and metrics assertions
+running against an endpoint that returns 404 under test. Different phases, same failure mode. That's a
+pattern worth a short section, because a passing suite that cannot fail is worse than no suite.
+
+Two bugs were found by running the thing rather than testing it. Postgres stores microseconds and rounds, so
+two supposedly identical idempotent responses differed in production while the test passed. And `since:monday`
+found nobody on Mondays, because the seed anchored to midnight and the query resolved to midnight — a query
+that parsed correctly, ran correctly, and truthfully returned nothing, one day in seven. It was caught on a
+Monday.
+
+One cost figure quoted in support of a decision turned out to be wrong by a factor of twenty, and was
+corrected after the decision had been made on it. Say so. Being trusted on numbers depends on that.
+
+One index was measured and deliberately not added, because at 50k it makes the first page 87 times faster and
+deep pages 3.7 times slower — so adding it alone would look like an improvement and measure as a regression.
+
+And say plainly which numbers come from `ExplainPassTest`, which does not run in a normal build.
+
+- Small cleanups while you're here
+
+`npm test` prints two Vite warnings: ESM syntax in `vitest.config.ts` loaded as CommonJS, and
+`vite-tsconfig-paths` now being redundant. Neither breaks anything, but a reviewer runs that command first and
+warnings read as neglect. Fix both.
 
 - Done when
 
-The README is written, the ADRs exist, the PDF renders from committed Mermaid sources, CI is green, and
-`source:referral` works having touched exactly one new file plus its registration.
+The README is written, the ADRs exist, the PDF renders from committed Mermaid sources, CI is green, `npm test`
+is warning-free, and `source:referral` works end to end having touched exactly one new file plus its
+registration.
