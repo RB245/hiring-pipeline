@@ -6,8 +6,6 @@ import com.pipeline.application.StaleCandidateStateException;
 import com.pipeline.domain.IllegalStageTransitionException;
 import com.pipeline.domain.Stage;
 import jakarta.servlet.http.HttpServletRequest;
-import java.net.URI;
-import java.util.List;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
@@ -30,7 +28,11 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 @RestControllerAdvice
 class ProblemDetails extends ResponseEntityExceptionHandler {
 
-    private static final String BASE = "https://pipeline.example/problems/";
+    private final Problems problems;
+
+    ProblemDetails(Problems problems) {
+        this.problems = problems;
+    }
 
     @ExceptionHandler(IllegalStageTransitionException.class)
     ResponseEntity<ProblemDetail> illegalTransition(IllegalStageTransitionException e, HttpServletRequest request) {
@@ -112,18 +114,8 @@ class ProblemDetails extends ResponseEntityExceptionHandler {
         return status.value() == HttpStatus.BAD_REQUEST.value() ? "invalid-request" : "request-failed";
     }
 
-    private static ProblemDetail problem(
+    private ProblemDetail problem(
             HttpStatusCode status, String slug, String title, String detail, HttpServletRequest request) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail == null ? title : detail);
-        problem.setType(URI.create(BASE + slug));
-        problem.setTitle(title);
-        problem.setInstance(URI.create(request.getRequestURI()));
-        problem.setProperty("correlationId", CorrelationId.current(request));
-        return problem;
-    }
-
-    /** Kept only so the field list below is visible in one place for the shape test. */
-    static List<String> requiredFields() {
-        return List.of("type", "title", "status", "detail", "instance", "correlationId");
+        return problems.of(status, slug, title, detail, request);
     }
 }

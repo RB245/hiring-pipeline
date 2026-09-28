@@ -50,7 +50,7 @@ class ProblemDetailsApiTest extends ApiTest {
             assertThat(result.getResponse().getContentType())
                     .as("RFC 9457 media type")
                     .startsWith("application/problem+json");
-            for (String field : ProblemDetails.requiredFields()) {
+            for (String field : Problems.requiredFields()) {
                 assertThat(body.has(field)).as("field %s in %s", field, body).isTrue();
             }
             assertThat(body.get("type").asText()).startsWith("https://pipeline.example/problems/");

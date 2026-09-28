@@ -33,6 +33,19 @@ services:
       DB_PASSWORD: ${APP_DB_PASSWORD:-pipeline_app}
       DB_MIGRATION_USER: ${POSTGRES_USER:-pipeline}
       DB_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD:-pipeline}
+      API_KEY: ${API_KEY:-change-me-local-only}
+      RECRUITER_ID: ${RECRUITER_ID:-recruiter-1}
+      RECRUITER_NAME: ${RECRUITER_NAME:-Asha Menon}
+      RATE_LIMIT_BACKEND: ${RATE_LIMIT_BACKEND:-redis}
+      RATE_LIMIT_WRITE: ${RATE_LIMIT_WRITE:-20}
+      RATE_LIMIT_READ: ${RATE_LIMIT_READ:-300}
+      RATE_LIMIT_SEARCH: ${RATE_LIMIT_SEARCH:-60}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      LOG_FORMAT: ${LOG_FORMAT:-ecs}
+      SEED_ENABLED: ${SEED_ENABLED:-true}
+      SEED_CANDIDATES: ${SEED_CANDIDATES:-200}
+      SEED_BASE_INSTANT: ${SEED_BASE_INSTANT:-}
     ports:
       - "8080:8080"
     depends_on:

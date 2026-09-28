@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Real Postgres, and connected as pipeline_app rather than the owner, so these tests
@@ -27,9 +28,28 @@ import org.springframework.test.context.DynamicPropertySource;
  * choose a mock, none or random-port web environment without fighting an inherited one.
  */
 @Import(IntegrationTest.TestClock.class)
+@TestPropertySource(
+        properties = {
+            // Seeding is off by default: 200 extra candidates would swamp every board
+            // and paging assertion. SeedPipelineTest turns it back on for itself.
+            "pipeline.seed.enabled=false",
+            // Effectively unlimited. The limiter's buckets live in a cached application
+            // context shared by every class using it, so production limits would have
+            // one suite's traffic throttling the next one's. RateLimitApiTest sets its
+            // own small limits, and these are declared here rather than in
+            // @DynamicPropertySource because a dynamic source outranks a subclass's
+            // @TestPropertySource and could not then be overridden.
+            "pipeline.rate-limit.write=1000000",
+            "pipeline.rate-limit.read=1000000",
+            "pipeline.rate-limit.search=1000000"
+        })
 public abstract class IntegrationTest {
 
     public static final Instant TEST_START = Instant.parse("2025-03-01T09:00:00Z");
+
+    public static final String API_KEY = "test-api-key";
+    public static final String RECRUITER_ID = "recruiter-1";
+    public static final String RECRUITER_NAME = "Asha Menon";
 
     @Autowired(required = false)
     private MutableClock clockUnderTest;
@@ -52,6 +72,9 @@ public abstract class IntegrationTest {
         registry.add("spring.datasource.username", () -> "pipeline_app");
         registry.add("spring.datasource.password", () -> SchemaFixture.APP_PASSWORD);
         registry.add("spring.flyway.enabled", () -> false);
+        registry.add("pipeline.auth.api-key", () -> API_KEY);
+        registry.add("pipeline.auth.recruiter-id", () -> RECRUITER_ID);
+        registry.add("pipeline.auth.recruiter-name", () -> RECRUITER_NAME);
     }
 
     @TestConfiguration
@@ -76,27 +99,8 @@ public abstract class IntegrationTest {
         return id;
     }
 
-    /**
-     * The one job opening the API resolves. Dated in 2000 and given a fixed id so it
-     * always sorts first and is created at most once, however many test classes share
-     * the container. Rows cannot be cleaned up between classes: stage_event refuses
-     * DELETE and candidate is pinned by its foreign key, so the fixture has to be
-     * stable rather than fresh.
-     */
+    /** Inserted by migration V8, which is the only identity allowed to create it. */
     protected static final UUID CANONICAL_JOB = UUID.fromString("00000000-0000-0000-0000-000000000001");
-
-    protected static void ensureCanonicalJob() throws SQLException {
-        try (Connection owner = SchemaFixture.asOwner();
-                PreparedStatement statement = owner.prepareStatement(
-                        """
-                        INSERT INTO job (id, title, created_at)
-                        VALUES (?, 'Backend Engineer', timestamptz '2000-01-01 00:00:00Z')
-                        ON CONFLICT (id) DO NOTHING
-                        """)) {
-            statement.setObject(1, CANONICAL_JOB);
-            statement.executeUpdate();
-        }
-    }
 
     protected static int countEvents(UUID candidateId) throws SQLException {
         try (Connection owner = SchemaFixture.asOwner();

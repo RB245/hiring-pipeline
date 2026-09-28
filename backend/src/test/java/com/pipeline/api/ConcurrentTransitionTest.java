@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pipeline.support.IntegrationTest;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -13,7 +12,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,11 +35,6 @@ class ConcurrentTransitionTest extends IntegrationTest {
 
     @Autowired TestRestTemplate rest;
     @Autowired ObjectMapper json;
-
-    @BeforeEach
-    void seedTheJob() throws SQLException {
-        ensureCanonicalJob();
-    }
 
     @Test
     void exactlyOneOfTwoSimultaneousTransitionsWins() throws Exception {
@@ -119,6 +112,7 @@ class ConcurrentTransitionTest extends IntegrationTest {
     private static HttpEntity<String> jsonBody(String body, String idempotencyKey) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-API-Key", API_KEY);
         if (idempotencyKey != null) {
             headers.set("Idempotency-Key", idempotencyKey);
         }

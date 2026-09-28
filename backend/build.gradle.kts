@@ -26,6 +26,15 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    // Lettuce is optional in the bucket4j module, so it is named here. Spring Data
+    // Redis is deliberately absent: it would auto-configure a health indicator for a
+    // client nothing else uses, and fail the health check whenever the in-memory
+    // limiter is the one selected.
+    implementation("com.bucket4j:bucket4j_jdk17-core:8.14.0")
+    implementation("com.bucket4j:bucket4j_jdk17-lettuce:8.14.0")
+    implementation("io.lettuce:lettuce-core")
+    implementation("com.github.ben-manes.caffeine:caffeine")
     // 2.8.x tracks Boot 3.5 and registers a swagger-ui resource pattern that Boot 3.4 s
     // PathPatternParser rejects outright, taking the whole context down. 2.7.0 is the
     // release aligned with Boot 3.4.
@@ -39,6 +48,7 @@ dependencies {
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
     testImplementation("org.testcontainers:postgresql")
     testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.springframework.security:spring-security-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

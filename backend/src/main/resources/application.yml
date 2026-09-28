@@ -25,3 +25,32 @@ management:
     web:
       exposure:
         include: health,prometheus
+
+logging:
+  structured:
+    format:
+      # One line of JSON per log line, with MDC entries promoted to fields, so the
+      # correlation id is queryable rather than buried in a message.
+      console: ${LOG_FORMAT:ecs}
+    json:
+      customizer: com.pipeline.infrastructure.MaskEmails
+
+pipeline:
+  auth:
+    # No default. A default key is a key in the repository.
+    api-key: ${API_KEY}
+    recruiter-id: ${RECRUITER_ID:recruiter-1}
+    recruiter-name: ${RECRUITER_NAME:Asha Menon}
+  rate-limit:
+    backend: ${RATE_LIMIT_BACKEND:memory}
+    write: ${RATE_LIMIT_WRITE:20}
+    read: ${RATE_LIMIT_READ:300}
+    search: ${RATE_LIMIT_SEARCH:60}
+    window: ${RATE_LIMIT_WINDOW:1m}
+    redis-host: ${REDIS_HOST:localhost}
+    redis-port: ${REDIS_PORT:6379}
+  seed:
+    enabled: ${SEED_ENABLED:true}
+    candidates: ${SEED_CANDIDATES:200}
+    # Pin this to reproduce a screenshot exactly; otherwise the clock's day is used.
+    base-instant: ${SEED_BASE_INSTANT:}

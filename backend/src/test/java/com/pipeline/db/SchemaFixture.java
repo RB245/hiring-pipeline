@@ -38,6 +38,36 @@ public final class SchemaFixture {
         return POSTGRES.getJdbcUrl();
     }
 
+    /**
+     * A second, empty, fully migrated database on the same container.
+     *
+     * <p>Needed because rows cannot be cleaned up between test classes: stage_event
+     * refuses DELETE and candidate is pinned by its foreign key. A test whose subject is
+     * "what happens against an empty pipeline" therefore cannot share a database with
+     * tests that fill one, and a whole extra container to get that would be waste.
+     */
+    public static String freshDatabase(String name) {
+        try (Connection owner = asOwner();
+                java.sql.Statement statement = owner.createStatement()) {
+            statement.execute("DROP DATABASE IF EXISTS " + name);
+            statement.execute("CREATE DATABASE " + name);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not create database " + name, e);
+        }
+
+        String url = "jdbc:postgresql://%s:%d/%s".formatted(POSTGRES.getHost(), POSTGRES.getFirstMappedPort(), name);
+        Flyway.configure()
+                .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+                .placeholders(Map.of("app_password", APP_PASSWORD))
+                .load()
+                .migrate();
+        return url;
+    }
+
+    public static Connection connectAsOwnerTo(String url) throws SQLException {
+        return DriverManager.getConnection(url, POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
     /** The identity Flyway ran as: a member of pipeline_migrator, so it holds DDL. */
     public static Connection asOwner() throws SQLException {
         return DriverManager.getConnection(
