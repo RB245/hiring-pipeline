@@ -43,6 +43,7 @@ class SeedPipelineTest {
         registry.add("spring.datasource.username", () -> "pipeline_app");
         registry.add("spring.datasource.password", () -> SchemaFixture.APP_PASSWORD);
         registry.add("spring.flyway.enabled", () -> false);
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> SchemaFixture.MAX_POOL_SIZE);
     }
 
     @Test

@@ -1,11 +1,13 @@
 package com.pipeline.search;
 
 /**
- * One way of loosening a query that found nobody: the condition to drop, spelled the way
- * she wrote it, and the query that is left without it.
+ * One way of loosening a query that found nobody: what to call it, and the query that does
+ * it.
  *
- * <p>{@code dropped} is rendered from the tree rather than sliced out of her input, so it
- * comes back in the same canonical form {@code /explain} shows — which means the
- * suggestion is something she can paste back into the box.
+ * <p>Both are strings in the canonical DSL, and {@code query} is a complete one rather than
+ * the condition to remove. That is what lets the caller take the count from the very query
+ * it offers, instead of counting one thing and advertising another and trusting the two to
+ * stay in step. It also means a client does one thing with a suggestion whatever kind it
+ * is: put {@code query} in the box and resubmit.
  */
-public record Relaxation(String dropped, Node remainder) {}
+public record Relaxation(String label, String query) {}

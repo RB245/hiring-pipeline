@@ -53,6 +53,31 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      # Not for the backend's own sake — it is so the frontend can wait for a backend that
+      # can actually answer. Without it the first page load races the migrations and the
+      # seed, and "docker compose up" shows an error page on a system that is merely
+      # still starting.
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  frontend:
+    build: ./frontend
+    environment:
+      # Service name, not localhost: this reaches Spring over the compose network, and
+      # the browser never does.
+      API_BASE_URL: http://backend:8080
+      # The same key the backend expects, held only here. It is never sent to the browser.
+      API_KEY: ${API_KEY:-change-me-local-only}
+      SESSION_RATE_LIMIT: ${SESSION_RATE_LIMIT:-240}
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres-data:

@@ -39,6 +39,19 @@ public final class SchemaFixture {
     }
 
     /**
+     * How many connections one test context may hold.
+     *
+     * <p>Small on purpose, and the reason is not frugality. Spring caches a context per
+     * distinct configuration and never closes it, so every context's pool is held open for
+     * the whole run — at Hikari's default of ten, a suite with a dozen configurations
+     * exhausts Postgres's hundred connection slots and the next context to start fails
+     * with "remaining connection slots are reserved", which surfaces as an unrelated
+     * "unable to determine Dialect". Five is comfortably above the two threads the most
+     * concurrent test uses.
+     */
+    public static final String MAX_POOL_SIZE = "5";
+
+    /**
      * A second, empty, fully migrated database on the same container.
      *
      * <p>Needed because rows cannot be cleaned up between test classes: stage_event

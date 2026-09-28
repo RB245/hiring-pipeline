@@ -105,6 +105,29 @@ class SearchApiTest extends ApiTest {
         assertThat(negation.get("source").toString()).isEqualTo("[16,32]");
     }
 
+    /**
+     * The argument for spelling the looser match as a field rather than a request flag,
+     * made good on: because it is in the query string, /explain can say what it does. A
+     * flag would have left this endpoint describing a search it was not running.
+     */
+    @Test
+    void explainDescribesTheLooserMatchBecauseItIsPartOfTheQuery() throws Exception {
+        JsonNode ast = getJson("/api/v1/search/explain", "q", "name_like:pryia").get("ast");
+
+        assertThat(ast.get("field").asText()).isEqualTo("name_like");
+        assertThat(ast.get("means").asText())
+                .isEqualTo("matched fuzzily against the name, exactly against the email,"
+                        + " and against any name within an edit or two of it");
+    }
+
+    /** And the tight one still says only what it does. */
+    @Test
+    void whileAPlainNameSaysOnlyThatItMatchedTheName() throws Exception {
+        JsonNode ast = getJson("/api/v1/search/explain", "q", "name:pryia").get("ast");
+
+        assertThat(ast.get("means").asText()).isEqualTo("matched fuzzily against the name");
+    }
+
     /** The same failure, the same code and the same span as running it would give. */
     @Test
     void explainRejectsABadQueryRatherThanGuessing() throws Exception {
@@ -183,8 +206,48 @@ class SearchApiTest extends ApiTest {
         // Only one of the two conditions unlocks anything: nobody in this database has
         // been hired, so dropping the name instead would still find nobody and is not
         // offered. A suggestion that leads to another empty page is not a suggestion.
-        assertThat(values(body.get("suggestions"), "without")).containsExactly("status:hired");
+        assertThat(values(body.get("suggestions"), "suggestion")).containsExactly("without status:hired");
+        assertThat(values(body.get("suggestions"), "query")).containsExactly("name:sharma");
         assertThat(body.get("suggestions").get(0).get("results").asLong()).isPositive();
+    }
+
+    /**
+     * The transposition case over HTTP. "pryia" is a query the tight filter cannot match at
+     * all, and a bare empty array was the one outcome this feature exists to prevent.
+     */
+    @Test
+    void aTypoTheFilterCannotSeeStillComesBackWithSomewhereToGo() throws Exception {
+        JsonNode body = getJson("/api/v1/candidates", "q", "pryia");
+
+        assertThat(body.get("candidates")).isEmpty();
+        assertThat(values(body.get("suggestions"), "suggestion"))
+                .containsExactly("with a looser name match on \"pryia\"");
+        assertThat(values(body.get("suggestions"), "query")).containsExactly("name_like:pryia");
+        assertThat(body.get("suggestions").get(0).get("results").asLong()).isPositive();
+    }
+
+    /**
+     * The interface a client actually uses: take the query off a suggestion, put it in the
+     * box, resubmit. The same two calls whichever kind of suggestion came back, with no
+     * string handling in between.
+     */
+    @Test
+    void asuggestionsQueryCanBeResubmittedAsIs() throws Exception {
+        JsonNode suggestion = getJson("/api/v1/candidates", "q", "pryia").get("suggestions").get(0);
+
+        JsonNode retried = getJson("/api/v1/candidates", "q", suggestion.get("query").asText());
+
+        assertThat(retried.get("candidates")).hasSize(suggestion.get("results").asInt());
+        assertThat(names(retried)).contains("Priya Sharma");
+    }
+
+    /** And a term that means nothing gets no invented suggestion. */
+    @Test
+    void aMeaninglessTermGetsNoSuggestionAtAll() throws Exception {
+        JsonNode body = getJson("/api/v1/candidates", "q", "zzzzzz");
+
+        assertThat(body.get("candidates")).isEmpty();
+        assertThat(body.get("suggestions")).isEmpty();
     }
 
     @Test

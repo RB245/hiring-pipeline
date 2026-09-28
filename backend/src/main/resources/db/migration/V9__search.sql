@@ -79,6 +79,49 @@ CREATE FUNCTION candidate_reached(reached_mask smallint, stage_bit integer) RETU
     AS $$ SELECT (reached_mask & stage_bit) = stage_bit $$;
 
 
+-- "Is this a plausible typo for what she typed?"
+--
+-- The edit-distance half of the name match, given its own name because it is needed in two
+-- places and they must not drift apart: as the typo floor inside candidate_name_score
+-- below, and as a filter in its own right when a search that found nobody is retried more
+-- loosely. One definition, so the score can never claim a typo the retry would not find.
+--
+-- It exists as a separate step because %> cannot see this case at all. word_similarity
+-- ('pryia', 'Priya Sharma') is 0.333 — below any threshold that would not also admit
+-- noise — while the edit distance is 2. A transposition in a short word is invisible to
+-- trigrams, so no amount of loosening the trigram threshold would catch it.
+--
+-- Deliberately not in the normal search path, and not indexable at all: there is no index
+-- that can find a transposition, which is the whole reason this exists rather than a looser
+-- trigram threshold.
+--
+-- It is expensive, and more so than it looks. A SQL function containing a subquery cannot
+-- be inlined, so this is a real function call per row rather than an expression folded into
+-- the scan. Measured on the retry as the search layer actually issues it: 49ms against the
+-- 200 candidates a seeded pipeline holds, and 3.0s against 50k, where the indexed trigram
+-- arm costs 11ms. Hoisting the term folding out, dropping STRICT, and replacing unnest with
+-- split_part were all tried; none inlines and two were slower.
+--
+-- That trade is deliberate but it is a real ceiling. It is affordable because it only ever
+-- runs on a query that has already come back empty — rare, and for the recruiter already a
+-- dead end, so a slow "did you mean these seven people" beats a fast nothing. It would not
+-- be affordable in the normal filter, and it is not affordable at 50k; a pipeline that size
+-- needs a token table with its own index, or the adapter swap the README describes.
+--
+-- The budget mirrors Levenshtein.budgetFor in the parser, which offers spelling corrections
+-- on the same rule: two edits normally, one for a term of four characters or fewer, so a
+-- short typo does not match half the alphabet. levenshtein_less_equal rather than
+-- levenshtein because it can stop counting once the budget is blown.
+CREATE FUNCTION candidate_name_typo(full_name text, term text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM unnest(string_to_array(lower(immutable_unaccent(full_name)), ' ')) AS word
+        WHERE levenshtein_less_equal(word, lower(immutable_unaccent(term)), 2)
+              <= CASE WHEN length(immutable_unaccent(term)) <= 4 THEN 1 ELSE 2 END)
+    $$;
+
+
 -- "How well does it match?" — the nameMatch term of the ranking formula.
 --
 -- Written here rather than in Java so that it sits beside the operator and the index it
@@ -93,11 +136,9 @@ CREATE FUNCTION candidate_reached(reached_mask smallint, stage_bit integer) RETU
 --
 -- The typo floor is a floor, not a replacement: the score is the better of it and the
 -- trigram figure, so a strong trigram match is never dragged down to 0.80 by also
--- happening to be within two edits.
---
--- The budget mirrors Levenshtein.budgetFor in the parser, which offers spelling
--- corrections on the same rule: two edits normally, one for a term of four characters or
--- fewer, so that a short typo does not match half the alphabet.
+-- happening to be within two edits. Its rule lives in candidate_name_typo above, which the
+-- zero-result retry also filters on, so a name this function would score as a typo is
+-- exactly a name that retry will find.
 --
 -- Worth knowing, because it is the case this floor exists for: trigram alone cannot see
 -- a transposition in a short word. word_similarity('pryia', 'Priya Sharma') is 0.333, so
@@ -114,10 +155,7 @@ CREATE FUNCTION candidate_name_score(full_name text, term text) RETURNS double p
         WHEN f.name LIKE f.needle || '%' OR f.name LIKE '% ' || f.needle || '%' THEN 0.85::double precision
         ELSE greatest(
             word_similarity(f.needle, f.name)::double precision,
-            CASE WHEN EXISTS (
-                SELECT 1 FROM unnest(string_to_array(f.name, ' ')) AS word
-                WHERE levenshtein_less_equal(word, f.needle, 2)
-                      <= CASE WHEN length(f.needle) <= 4 THEN 1 ELSE 2 END)
+            CASE WHEN candidate_name_typo(full_name, term)
                  THEN 0.80::double precision ELSE 0.0::double precision END)
     END
     FROM folded f

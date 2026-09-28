@@ -87,9 +87,41 @@ public class SpecificationBuilder {
             Node remainder = remaining.size() == 1
                     ? remaining.get(0)
                     : new Node.And(remaining, and.span(), and.source());
-            relaxations.add(new Relaxation(Dsl.render(dropped), remainder));
+            relaxations.add(new Relaxation("without " + Dsl.render(dropped), Dsl.render(remainder)));
         }
         return List.copyOf(relaxations);
+    }
+
+    /**
+     * The conditions that could be asked more generously, each as the query that asks them
+     * that way.
+     *
+     * <p>Every condition in the tree, not only the top-level ones, because a misspelling
+     * inside an OR is still a misspelling. Which field is more generous than which is the
+     * fields' own business; all this does is ask.
+     */
+    public List<Loosening> looseners(Node node) {
+        List<Loosening> looseners = new ArrayList<>();
+        collectLooseners(node, false, looseners);
+        return List.copyOf(looseners);
+    }
+
+    private void collectLooseners(Node node, boolean negated, List<Loosening> looseners) {
+        switch (node) {
+            case Node.And and -> and.children().forEach(child -> collectLooseners(child, negated, looseners));
+            case Node.Or or -> or.children().forEach(child -> collectLooseners(child, negated, looseners));
+            case Node.Not not -> collectLooseners(not.child(), !negated, looseners);
+            case Node.Predicate predicate -> loosen(leaf(predicate, negated), Dsl.render(predicate), looseners);
+            case Node.Term term -> loosen(leaf(term, negated), Dsl.render(term), looseners);
+        }
+    }
+
+    private void loosen(Leaf leaf, String asWritten, List<Loosening> looseners) {
+        leaf.loosensTo()
+                .ifPresent(field -> looseners.add(new Loosening(
+                        "with a looser %s match on \"%s\"".formatted(leaf.field(), leaf.term()),
+                        Dsl.predicate(field, leaf.term()),
+                        asWritten)));
     }
 
     private Leaf leaf(Node.Predicate predicate, boolean negated) {

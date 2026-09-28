@@ -1,6 +1,7 @@
 package com.pipeline.infrastructure;
 
 import com.pipeline.application.CandidateSearch;
+import com.pipeline.application.SearchBudgetExceededException;
 import com.pipeline.application.SearchCursor;
 import com.pipeline.application.SearchHit;
 import com.pipeline.search.Leaf;
@@ -15,13 +16,17 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Selection;
+import java.sql.SQLException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * One query, one scan, everything the answer needs: the rows, their score, and a column
@@ -97,35 +102,85 @@ class JpaCandidateSearch implements CandidateSearch {
      * It also means the cap on how many suggestions to show is a presentation decision
      * rather than a cost one.
      */
+    /**
+     * A conditional aggregate per query, so all of them are answered by one pass over the
+     * candidates rather than by one round trip each.
+     */
     @Override
-    public List<Relaxation> relaxations(UUID jobId, SearchQuery query) {
-        List<com.pipeline.search.Relaxation> options = specifications.relaxations(query.ast());
-        if (options.isEmpty()) {
+    public List<Long> counts(UUID jobId, List<SearchQuery> queries) {
+        if (queries.isEmpty()) {
             return List.of();
         }
-
         CriteriaBuilder builder = entities.getCriteriaBuilder();
         CriteriaQuery<Tuple> criteria = builder.createTupleQuery();
         Root<CandidateEntity> candidate = criteria.from(CandidateEntity.class);
 
-        List<Selection<?>> counts = new ArrayList<>();
-        for (com.pipeline.search.Relaxation option : options) {
-            counts.add(builder.sum(builder.<Long>selectCase()
-                    .when(specifications.predicate(option.remainder(), candidate, criteria, builder), 1L)
+        List<Selection<?>> columns = new ArrayList<>();
+        for (SearchQuery query : queries) {
+            columns.add(builder.sum(builder.<Long>selectCase()
+                    .when(specifications.predicate(query.ast(), candidate, criteria, builder), 1L)
                     .otherwise(0L)));
         }
 
         Tuple row = entities
-                .createQuery(criteria.multiselect(counts).where(builder.equal(candidate.get("jobId"), jobId)))
+                .createQuery(criteria.multiselect(columns).where(builder.equal(candidate.get("jobId"), jobId)))
                 .getSingleResult();
 
-        List<Relaxation> relaxations = new ArrayList<>();
-        for (int i = 0; i < options.size(); i++) {
+        List<Long> counts = new ArrayList<>();
+        for (int i = 0; i < queries.size(); i++) {
             // SUM over no rows is null rather than zero, which would be an empty pipeline.
             Long count = row.get(i, Long.class);
-            relaxations.add(new Relaxation(options.get(i).dropped(), count == null ? 0 : count));
+            counts.add(count == null ? 0 : count);
         }
-        return List.copyOf(relaxations);
+        return List.copyOf(counts);
+    }
+
+    /**
+     * The same, with the database told to give up.
+     *
+     * <p>{@code SET LOCAL} rather than a JDBC query timeout, so the bound is enforced by
+     * the server that is doing the work and released with the transaction whatever happens
+     * next.
+     *
+     * <p>Its own transaction, and that is not tidiness. A statement cancelled by Postgres
+     * leaves its transaction in an aborted state, where every later statement fails too —
+     * so running this inside the caller's transaction would take the rest of the response
+     * down with the suggestion it was trying to abandon. Suspended and separate, the abort
+     * is contained: the caller loses one optional extra and keeps everything else.
+     */
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    public List<Long> countsWithin(UUID jobId, List<SearchQuery> queries, Duration budget) {
+        // Not a bound parameter: SET takes none. The value is a configured duration, never
+        // anything a caller supplies.
+        entities.createNativeQuery("SET LOCAL statement_timeout = " + budget.toMillis())
+                .executeUpdate();
+        try {
+            return counts(jobId, queries);
+        } catch (RuntimeException e) {
+            if (cancelledByTimeout(e)) {
+                throw new SearchBudgetExceededException(budget, e);
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 57014 is query_canceled. Matched on the SQLState rather than on an exception type
+     * because the wrapper differs between Hibernate versions and drivers, while the state
+     * is the wire protocol. A genuine failure carries a different code and is rethrown, so
+     * a broken query cannot disguise itself as a slow one.
+     */
+    private static boolean cancelledByTimeout(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql && "57014".equals(sql.getSQLState())) {
+                return true;
+            }
+            if (cause == cause.getCause()) {
+                break;
+            }
+        }
+        return false;
     }
 
     private Predicate keyset(

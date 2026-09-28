@@ -32,6 +32,7 @@ public final class SearchFixture {
                 new InStageForField(),
                 new StatusField(),
                 new NameField(),
+                new NameLikeField(),
                 new AppliedField());
     }
 

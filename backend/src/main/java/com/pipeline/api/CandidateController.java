@@ -12,6 +12,7 @@ import com.pipeline.application.RegisterCandidate;
 import com.pipeline.application.SearchCandidates;
 import com.pipeline.application.TransitionCandidate;
 import com.pipeline.application.TransitionOutcome;
+import com.pipeline.domain.TransitionRules;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -49,6 +50,7 @@ class CandidateController {
     private final EventReader events;
     private final JobReader jobs;
     private final CurrentActor actor;
+    private final TransitionRules rules;
     private final Clock clock;
 
     CandidateController(
@@ -59,6 +61,7 @@ class CandidateController {
             EventReader events,
             JobReader jobs,
             CurrentActor actor,
+            TransitionRules rules,
             Clock clock) {
         this.registerCandidate = registerCandidate;
         this.transitionCandidate = transitionCandidate;
@@ -67,6 +70,7 @@ class CandidateController {
         this.events = events;
         this.jobs = jobs;
         this.actor = actor;
+        this.rules = rules;
         this.clock = clock;
     }
 
@@ -114,7 +118,7 @@ class CandidateController {
 
         CandidatePage page = candidates.page(jobId, cursor == null ? null : CursorCodec.decode(cursor), limit);
         return CandidatePageResponse.list(
-                page.candidates().stream().map(summary -> CandidateResponse.of(summary, clock)).toList(),
+                page.candidates().stream().map(summary -> CandidateResponse.of(summary, clock, rules)).toList(),
                 page.next() == null ? null : CursorCodec.encode(page.next()));
     }
 
@@ -122,7 +126,7 @@ class CandidateController {
         SearchCandidates.Results results =
                 search.search(jobId, q, cursor == null ? null : CursorCodec.decodeSearch(cursor), limit);
         return CandidatePageResponse.search(
-                results.hits().stream().map(hit -> CandidateResponse.of(hit, clock)).toList(),
+                results.hits().stream().map(hit -> CandidateResponse.of(hit, clock, rules)).toList(),
                 results.next() == null ? null : CursorCodec.encode(results.next()),
                 results.query().dsl(),
                 results.suggestions());
@@ -184,6 +188,6 @@ class CandidateController {
 
     private CandidateResponse read(UUID id) {
         CandidateSummary summary = candidates.summary(id).orElseThrow(() -> new CandidateNotFoundException(id));
-        return CandidateResponse.of(summary, clock);
+        return CandidateResponse.of(summary, clock, rules);
     }
 }

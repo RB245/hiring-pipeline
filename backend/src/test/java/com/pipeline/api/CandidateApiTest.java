@@ -47,6 +47,48 @@ class CandidateApiTest extends ApiTest {
                 .andExpect(jsonPath("$.timeInCurrentStageHumanised").value("6 days"));
     }
 
+    /**
+     * The board renders a button per legal target, so this list is the only thing standing
+     * between it and a copy of the state machine in TypeScript. Asserted here rather than
+     * trusted, because the failure mode is a button that offers a move the API refuses.
+     */
+    @Test
+    void everyCandidateCarriesTheMovesItActuallyHas() throws Exception {
+        UUID id = createCandidate("Knows Its Moves");
+
+        mvc.perform(get("/api/v1/candidates/{id}", id))
+                .andExpect(jsonPath("$.currentStage").value("APPLIED"))
+                .andExpect(jsonPath("$.legalTargets").value(hasItem("SCREENING")))
+                .andExpect(jsonPath("$.legalTargets").value(hasItem("REJECTED")))
+                .andExpect(jsonPath("$.legalTargets.length()").value(2));
+    }
+
+    /** Empty rather than absent, so "terminal" is something the board can see and explain. */
+    @Test
+    void aTerminalCandidateCarriesNoMovesAtAll() throws Exception {
+        UUID id = createCandidate("Out Of Moves");
+        mvc.perform(post("/api/v1/candidates/{id}/transitions", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"expectedCurrentStage": "APPLIED", "toStage": "REJECTED"}
+                                """))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/v1/candidates/{id}", id))
+                .andExpect(jsonPath("$.currentStage").value("REJECTED"))
+                .andExpect(jsonPath("$.legalTargets.length()").value(0));
+    }
+
+    /** And the board carries them too, since that is where the buttons are. */
+    @Test
+    void theBoardCarriesThemOnEveryCard() throws Exception {
+        createCandidate("On The Board With Moves");
+
+        mvc.perform(get("/api/v1/pipeline"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.columns[0].candidates[0].legalTargets").exists());
+    }
+
     @Test
     void oneDayIsSingular() throws Exception {
         UUID id = createCandidate("One Day");

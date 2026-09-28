@@ -1,11 +1,12 @@
 package com.pipeline.application;
 
 import com.pipeline.search.SearchQuery;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Running a parsed query. Separate from {@link CandidateReader} because the list and the
+ * Running parsed queries. Separate from {@link CandidateReader} because the list and the
  * board answer "show me everyone, in this order" while this answers "who matches, best
  * first" — different keys, different cursors, and only one of them ranks.
  *
@@ -19,13 +20,24 @@ public interface CandidateSearch {
     SearchResultPage search(UUID jobId, SearchQuery query, SearchCursor after, int limit);
 
     /**
-     * How many rows each of the query's conditions is costing her, for when it matched
-     * nobody. One pass over the candidates rather than one query per condition.
+     * How many candidates each query matches, in the order given, in one pass over the
+     * candidates. One pass rather than one query each: cheaper, and it cannot produce
+     * counts that disagree with each other because a transition landed between two of them.
      */
-    List<Relaxation> relaxations(UUID jobId, SearchQuery query);
+    List<Long> counts(UUID jobId, List<SearchQuery> queries);
 
-    /** "without in_stage_for:&gt;7d  -&gt; 6 results". Only ever built for a query that found nothing. */
-    record Relaxation(String without, long results) {}
+    /**
+     * The same, abandoned if it takes longer than {@code budget}.
+     *
+     * <p>For queries that are worth asking but not worth waiting for. The edit-distance
+     * retry behind a zero-result suggestion is the case: it cannot use an index, so its
+     * cost grows with the pipeline, and it is already being run on top of a search that
+     * failed. A missing suggestion costs her a line of text; a hang costs her the request,
+     * and on a 60-per-minute tier, several more behind it.
+     *
+     * @throws SearchBudgetExceededException if the budget was spent before an answer
+     */
+    List<Long> countsWithin(UUID jobId, List<SearchQuery> queries, Duration budget);
 
     /** {@code next} is null on the last page. */
     record SearchResultPage(List<SearchHit> hits, SearchCursor next) {}

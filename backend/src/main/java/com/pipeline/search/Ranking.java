@@ -197,7 +197,7 @@ public final class Ranking {
             ResolvedValue.TextValue text, Root<?> candidate, CriteriaBuilder builder) {
         Expression<Double> byName = builder.function(
                 "candidate_name_score", Double.class, candidate.get("fullName"), builder.literal(text.text()));
-        if (!text.alsoEmail()) {
+        if (!text.includesEmail()) {
             return byName;
         }
         return builder.<Double>selectCase()

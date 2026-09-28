@@ -5,6 +5,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * One condition of a query, with any enclosing negations already folded in, so that
@@ -16,9 +17,31 @@ import java.util.Locale;
  */
 public record Leaf(FieldHandler handler, ResolvedValue value, boolean negated) {
 
-    Predicate predicate(Root<?> candidate, CriteriaQuery<?> query, CriteriaBuilder builder) {
+    public Predicate predicate(Root<?> candidate, CriteriaQuery<?> query, CriteriaBuilder builder) {
         Predicate predicate = handler.predicate(value, candidate, query, builder);
         return negated ? builder.not(predicate) : predicate;
+    }
+
+    /**
+     * The field this condition should be retried against when the query found nobody, or
+     * empty if there is no more generous way to ask it.
+     *
+     * <p>Never offered for a negated condition. Loosening "not called Sharma" widens who is
+     * excluded, which is the opposite of a suggestion — it can only ever return fewer rows,
+     * and the whole point is to return more.
+     */
+    public Optional<String> loosensTo() {
+        return negated ? Optional.empty() : handler.loosensTo();
+    }
+
+    /** The text she typed, for naming this condition in a suggestion. */
+    public String term() {
+        return value instanceof ResolvedValue.TextValue text ? text.text() : "";
+    }
+
+    /** The field's own name, so a suggestion can say which one it is talking about. */
+    public String field() {
+        return handler.field();
     }
 
     /** True for a positive fuzzy-text condition, which is the one the name score reads. */

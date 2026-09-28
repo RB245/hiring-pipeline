@@ -2,10 +2,10 @@ package com.pipeline.search;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.pipeline.application.CandidateSearch;
 import com.pipeline.application.SearchCandidates;
 import com.pipeline.application.SearchCursor;
 import com.pipeline.application.SearchHit;
+import com.pipeline.application.Suggestion;
 import com.pipeline.db.SchemaFixture;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -20,6 +20,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -68,6 +69,7 @@ class SearchExecutionTest {
         registry.add("spring.datasource.username", () -> "pipeline_app");
         registry.add("spring.datasource.password", () -> SchemaFixture.APP_PASSWORD);
         registry.add("spring.flyway.enabled", () -> false);
+        registry.add("spring.datasource.hikari.maximum-pool-size", () -> SchemaFixture.MAX_POOL_SIZE);
     }
 
     /** A distinct bean name, since overriding the production definition is switched off. */
@@ -282,8 +284,88 @@ class SearchExecutionTest {
         assertThat(results.suggestions()).isNotEmpty();
         assertThat(results.suggestions())
                 .allSatisfy(suggestion -> assertThat(suggestion.results()).isPositive());
-        assertThat(results.suggestions().stream().map(CandidateSearch.Relaxation::without))
-                .contains("status:hired");
+        assertThat(results.suggestions().stream().map(Suggestion::label)).contains("without status:hired");
+    }
+
+    // ---- the typo that trigrams cannot see ---------------------------------
+
+    /**
+     * The case the tight filter is structurally unable to reach. "pryia" is a
+     * transposition, which scores 0.333 on word similarity — under any threshold that does
+     * not also admit noise — so it survives neither the %> filter nor the typo floor in the
+     * score, which only ever sees rows the filter already returned.
+     *
+     * <p>Widening the filter was the wrong fix: 0.40 was measured and lets in genuine
+     * noise. Offering the wider reading as a suggestion keeps the precision and still means
+     * she is never told, flatly, that nobody is called that.
+     */
+    @Test
+    void aTranspositionComesBackWithSomewhereToGoRatherThanNothing() {
+        SearchCandidates.Results results = search.search(JOB, "pryia", null, 20);
+
+        assertThat(results.hits()).isEmpty();
+        assertThat(results.suggestions()).hasSize(1);
+        assertThat(results.suggestions().get(0).label()).isEqualTo("with a looser name match on \"pryia\"");
+        assertThat(results.suggestions().get(0).query()).isEqualTo("name_like:pryia");
+        assertThat(results.suggestions().get(0).results()).isPositive();
+    }
+
+    /**
+     * And what it promises is the person she was looking for. Asserted against the wider
+     * reading written out in SQL, because the count is only worth offering if the rows
+     * behind it are the ones she wants — a suggestion that is arithmetically true and
+     * useless is worse than none.
+     */
+    @Test
+    void andRunningWhatItSuggestsFindsPriyaSharma() {
+        Suggestion suggestion = search.search(JOB, "pryia", null, 20).suggestions().get(0);
+
+        assertThat(namesFor(suggestion.query())).contains("Priya Sharma");
+    }
+
+    /**
+     * The other half of the requirement, and the one that keeps the feature honest: a term
+     * that means nothing must come back with nothing to offer rather than an invented
+     * suggestion. Edit distance will happily rank the least-bad of six hundred names.
+     */
+    @Test
+    void aMeaninglessTermInventsNoSuggestion() {
+        SearchCandidates.Results results = search.search(JOB, "zzzzzz", null, 20);
+
+        assertThat(results.hits()).isEmpty();
+        assertThat(results.suggestions()).isEmpty();
+    }
+
+    /**
+     * Loosening is withheld when it would change nothing. Here the name matched six people
+     * all along and some other condition emptied the result, so blaming her spelling would
+     * point her at the wrong thing.
+     */
+    @Test
+    void loosenedMatchingIsNotOfferedWhenTheNameWasNeverTheProblem() {
+        SearchCandidates.Results results = search.search(JOB, "name:sharma status:hired", null, 20);
+
+        assertThat(results.hits()).isEmpty();
+        // Dropping either condition is fair advice; claiming her spelling was the problem
+        // is not, because "sharma" matched those six people all along.
+        assertThat(results.suggestions().stream().map(Suggestion::label))
+                .containsExactlyInAnyOrder("without status:hired", "without name:sharma")
+                .noneMatch(label -> label.contains("looser"));
+    }
+
+    /**
+     * A negated name is never offered a looser reading. Widening what is excluded excludes
+     * more people, so it can only ever return fewer rows — the opposite of a suggestion.
+     */
+    @Test
+    void aNegatedNameIsNotOfferedALooserReading() {
+        SearchCandidates.Results results =
+                search.search(JOB, "-name:pryia status:hired in_stage_for:>7d", null, 20);
+
+        assertThat(results.hits()).isEmpty();
+        assertThat(results.suggestions()).isNotEmpty();
+        assertThat(results.suggestions().stream().map(Suggestion::label))
+                .noneMatch(label -> label.contains("looser"));
     }
 
     /** Most generous first, so the first line is the condition most likely to be in the way. */
@@ -297,16 +379,43 @@ class SearchExecutionTest {
                 .isSortedAccordingTo((a, b) -> Long.compare(b.results(), a.results()));
     }
 
-    /** Each count is the real thing: run what it suggests and you get what it promised. */
-    @Test
-    void aSuggestedCountIsWhatThatQueryActuallyReturns() {
-        String query = "stage:screening in_stage_for:>7d status:hired";
+    /**
+     * The property the whole design rests on, and the one that stops the two kinds of
+     * suggestion drifting: every suggestion carries a complete query, and running that
+     * query returns exactly the number it promised. Asserted across a range of shapes
+     * rather than one, because the interesting failures are the ones where a count is taken
+     * from a different predicate than the query advertises.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "stage:screening in_stage_for:>7d status:hired",
+        "name:sharma status:hired",
+        "pryia",
+        "pryia stage:offer",
+        "name:pryia in_stage_for:>7d",
+        "stage:offer status:hired in_stage_for:>7d",
+        "reached:offer status:hired stage:screening"
+    })
+    void everySuggestionsQueryReturnsExactlyTheCountItPromised(String query) {
         SearchCandidates.Results results = search.search(JOB, query, null, 20);
 
-        CandidateSearch.Relaxation suggestion = results.suggestions().get(0);
-        String loosened = withoutCondition(query, suggestion.without());
+        assertThat(results.hits()).as("%s should find nobody", query).isEmpty();
+        assertThat(results.suggestions()).as("%s offered nothing to check", query).isNotEmpty();
+        assertThat(results.suggestions()).allSatisfy(suggestion -> assertThat(idsFor(suggestion.query()))
+                .as("%s -> %s", suggestion.label(), suggestion.query())
+                .hasSize((int) suggestion.results()));
+    }
 
-        assertThat(idsFor(loosened)).hasSize((int) suggestion.results());
+    /** Both kinds are covered by the property above; this pins that both kinds occur in it. */
+    @Test
+    void bothKindsOfSuggestionAreExercisedByThatProperty() {
+        List<String> labels = new ArrayList<>();
+        for (String query : List.of("name:pryia in_stage_for:>7d", "stage:screening in_stage_for:>7d status:hired")) {
+            search.search(JOB, query, null, 20).suggestions().forEach(suggestion -> labels.add(suggestion.label()));
+        }
+
+        assertThat(labels).anyMatch(label -> label.startsWith("without "));
+        assertThat(labels).anyMatch(label -> label.startsWith("with a looser "));
     }
 
     /**
@@ -350,10 +459,6 @@ class SearchExecutionTest {
 
     private List<String> namesFor(String query) {
         return hits(query).stream().map(hit -> hit.candidate().fullName()).toList();
-    }
-
-    private static String withoutCondition(String query, String condition) {
-        return query.replace(condition, "").replaceAll("\\s+", " ").strip();
     }
 
     private String emailOf(String fullName) {

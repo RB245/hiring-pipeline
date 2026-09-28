@@ -7,11 +7,13 @@ comes back empty.
 ## The shape of it
 
 ```
-SearchQueryParser   sentence -> AST                                  (file 07)
+SearchQueryParser    sentence -> AST                                 (file 07)
 SpecificationBuilder AST -> Criteria predicate, composing only
-FieldHandler.predicate  one field's SQL, per field
-Ranking             the score expression, in SQL
-JpaCandidateSearch  one query: rows, score, and a flag per condition
+FieldHandler.predicate   one field's SQL, per field
+FieldHandler.loosensTo   which field to retry against when it finds nobody
+Ranking              the score expression, in SQL
+SearchCandidates     runs it; on zero results, builds and counts suggestions
+JpaCandidateSearch   one query: rows, score, and a flag per condition
 ```
 
 `SpecificationBuilder` composes `and`/`or`/`not` and walks to the children. It contains no
@@ -80,10 +82,10 @@ Two things worth knowing about the ranking that fall out of this:
   is 0.857 against 0.571 for `Priya Sharma`. The edit-distance floor is what fixes that.
 - Trigram cannot see a transposition in a short word at all. `word_similarity('pryia',
   'Priya Sharma')` is 0.333, below any usable threshold, while `levenshtein('pryia',
-  'priya')` is 2. Because edit distance is a ranking tiebreak applied to rows the index
-  already returned — it costs 141ms against 50k rows in a `WHERE`, versus 12ms for the
-  trigram arm — `pryia` currently finds nobody. Widening the name match as an extra
-  zero-result suggestion is the fix if that case ever matters.
+  'priya')` is 2. Edit distance was originally only a ranking tiebreak, applied to rows the
+  index had already returned — which meant `pryia` never reached it and came back empty.
+  That was the floor sitting in the wrong half of the pipeline; it is now also available as
+  a zero-result retry, below.
 
 A bare word matches the name fuzzily and the email **exactly**. Fuzzy email was measured and
 rejected: `name %> term OR email LIKE '%term%'` costs 310ms against 50k rows because the
@@ -99,8 +101,10 @@ that exists.
 
 ## Zero results
 
-A query that parsed, ran and matched nobody comes back with counts for each top-level
-condition dropped in turn, best first, capped at three.
+A query that parsed, ran and matched nobody comes back with counts for more generous ways
+of reading it, best first, capped at three. There are two kinds.
+
+**Drop a condition.** One suggestion per top-level conjunct.
 
 ```
 0 results.
@@ -108,20 +112,128 @@ condition dropped in turn, best first, capped at three.
   without -status:rejected   ->  2 results
 ```
 
-These are computed in **one** query with a conditional aggregate per option, not one COUNT
-per condition. That is cheaper than N round trips, cannot produce counts that disagree with
-each other because a transition landed between two of them, and makes the cap a
-presentation decision rather than a cost one.
-
 Only top-level conjuncts are offered. Dropping a branch of an `OR` loosens nothing, and
 dropping the only condition of a one-condition query is not advice.
 
+**Loosen the name.** For a name or bare term, the same term retried against `name_like:`,
+which allows an edit or two.
+
+```
+No matches for pryia.
+  with a looser name match on "pryia"   ->  name_like:pryia   ->  7 results
+```
+
+`name_like:` is a **field**, not a request flag, and that is load-bearing rather than
+cosmetic. A flag would put part of the question outside the query string: the search box
+would stop describing its own results, the interpretation chips would have nothing to show
+for it, and `/explain` would stop being the whole truth about what ran. As a field it costs
+one handler, touches neither lexer nor parser, autocompletes next to `name:` so the feature
+teaches itself, and — the point — gives the suggestion a query she could have typed.
+
+The spelling was chosen over the alternatives for reasons worth recording. `sounds_like:`
+promises phonetic matching, which this is not: *Smyth* and *Smith* sound alike but are one
+edit apart, and the two disagree often enough that the name would be a lie. `similar:` says
+nothing about *what* is similar, which will matter the first time anything else about a
+candidate can be.
+
+This is the case the filter is structurally unable to reach: a transposition is invisible to
+trigrams, so `pryia` matches nothing, and the typo floor inside `candidate_name_score` never
+sees it because the score only runs on rows the filter already returned. Widening the filter
+itself was rejected — 0.40 was measured and admits genuine noise — so the wider reading is
+offered rather than applied, and the precision of a normal search is untouched.
+
+The retry filters on `candidate_name_typo`, the same function the typo floor uses, so a name
+the score would call a typo is exactly a name the retry finds.
+
+It is the most expensive thing in this feature by a wide margin, and the number deserves
+stating plainly rather than being waved at. Measured on the retry as the search layer
+actually issues it:
+
+| Rows | Retry | Indexed trigram filter, for comparison |
+|---|---|---|
+| 200 (seeded pipeline) | 49 ms | under 1 ms |
+| 50k | **3.0 s** | 11 ms |
+
+Two things make it that slow, and neither is fixable by a better index. Edit distance is not
+indexable at all — that is the whole reason this exists rather than a looser trigram
+threshold. And a SQL function containing a subquery cannot be inlined, so it is a real
+function call per row rather than an expression folded into the scan; hoisting the term
+folding out, dropping `STRICT`, and replacing `unnest` with `split_part` were all tried, none
+inlines, and two were slower.
+
+At the scale this application runs, 49ms on a query that already returned nothing is a good
+trade. At 50k it is not, and the honest statement is that this feature has a ceiling: a
+pipeline that size needs a token table with its own index, or the adapter swap the README
+describes. It is affordable here because it runs only when a search has already come back
+empty — rare, and already a dead end for her, so a slow "did you mean these seven people"
+beats a fast nothing.
+
+**That ceiling is enforced, not just documented.** The retry runs under `SET LOCAL
+statement_timeout`, defaulting to one second (`pipeline.search.relaxation-budget`) — twenty
+times the measured cost at real scale, comfortably under the 3.0s worst case. If it trips,
+the suggestion is dropped and the rest of the response goes out without it. A missing
+suggestion costs her a line of text; a three-second hang costs her the request, and on a
+60-per-minute tier, the ones queued behind it.
+
+The bound is the database's own, so it holds whatever the JVM is doing. It also forces one
+structural decision: a statement cancelled by Postgres leaves its transaction unusable, so
+the retry runs in its **own** transaction. Sharing the caller's would take the whole
+response down with the suggestion it was trying to abandon. `RelaxationBudgetTest` sets an
+impossible 1ms budget and asserts both halves — that it trips, and that the cheap
+suggestions still arrive.
+
+> An earlier draft of this page quoted 141ms for this. That figure was for the raw
+> expression written inline, on a warm cache, not for the function the search layer calls —
+> the shipped shape is roughly twenty times slower at 50k. Corrected after re-measuring.
+> It is exactly the kind of number that goes stale silently, which is why the harness note
+> above matters.
+
+Two rules keep it from being noise:
+
+- It is **withheld when loosening changes nothing.** `name:sharma status:hired` finds nobody,
+  but "sharma" matched those six people all along — the spelling was never the problem, and
+  saying otherwise points her at the wrong condition. Offered only when the wider reading
+  finds strictly more than the query as written, which is why `zzzzzz` gets no suggestion at
+  all rather than an invented one.
+- It is **never offered for a negated term.** Loosening `-name:pryia` widens who is
+  *excluded*, so it can only ever return fewer rows.
+
+Both kinds are computed in **one** query with a conditional aggregate per option, not one
+COUNT per suggestion. That is cheaper than N round trips, cannot produce counts that
+disagree with each other because a transition landed between two of them, and makes the cap
+a presentation decision rather than a cost one.
+
+Every suggestion is `{suggestion, query, results}`, where `query` is a **complete canonical
+DSL string that returns exactly `results` candidates**. A client does one thing with either
+kind — put `query` in the box and resubmit — with no string handling and no need to know
+which sort it got.
+
+That shape is what keeps the two honest. The count is taken by running the very query being
+offered, so the promise and the delivery cannot drift; there is no path where one predicate
+is counted and another advertised. `SearchExecutionTest` asserts the property directly
+across seven query shapes: for every suggestion, running its query returns its count.
+
 ## Query plans
+
+> **These numbers are not re-checked by the build.** Every figure on this page was measured
+> once, by hand, against a 50k-row database that no test fixture builds. The harness that
+> produces them — `ExplainPassTest` — is **skipped in a normal run**: the suite reports it
+> as one skipped test among 400-odd passing ones, which is easy to read as noise. It is not
+> noise. It is the only thing standing behind every millisecond quoted here.
+>
+> Treat them as a snapshot, not a guarantee. They will silently go stale the first time a
+> field handler changes shape, and nothing will fail. Re-run the harness when that happens;
+> the exact commands are in that class's javadoc, and the dataset is committed at
+> `backend/src/test/resources/perf/50k-candidates.sql` so "generate 50k candidates" is an
+> instruction rather than an exercise.
+>
+> Not enabling it by default is a deliberate trade: seeding 50k rows on every build to
+> re-check numbers that only move when the query shapes move is the wrong cost.
 
 All measured against 50k candidates and 152k events on `postgres:16`, with
 `max_parallel_workers_per_gather = 0`, on the SQL Hibernate actually emits — captured from
-the server log rather than written by hand. `ExplainPassTest` is the harness; it is inert
-unless `SPIKE_DB` points at such a database.
+the server log rather than written by hand, because reading the plan of a query you retyped
+proves only that you retyped it consistently.
 
 | Query | Plan | Time |
 |---|---|---|
@@ -191,3 +303,9 @@ costs 0.13ms flat at any depth, but needs a native query.
 So the choice is not "index or no index". It is "index plus a native row-value `pageAfter`,
 or neither". Neither, for now — with a tripwire recorded here, because adding the index on
 its own would look like an improvement and measure as a regression.
+
+## Open
+
+Nothing outstanding in the search layer. The one gap that was here — suggestions being
+readable but not actionable — is closed: `name_like:` gave the looser reading a spelling, and
+every suggestion now carries the query that produces it.

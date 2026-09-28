@@ -105,7 +105,7 @@ public class SeedPipeline implements ApplicationRunner {
 
         int total = properties.candidates();
         for (int i = 0; i < total; i++) {
-            seedOne(jobId, actor, i, base, random);
+            seedOne(jobId, actor, i, base, clock.instant(), random);
         }
 
         log.info("Seeded {} candidates with backdated histories from base {}", total, base);
@@ -123,9 +123,9 @@ public class SeedPipeline implements ApplicationRunner {
                 : Instant.parse(configured);
     }
 
-    private void seedOne(UUID jobId, Actor actor, int index, Instant base, Random random) {
+    private void seedOne(UUID jobId, Actor actor, int index, Instant base, Instant now, Random random) {
         String fullName = nameFor(index);
-        List<Step> history = historyFor(index, base, random);
+        List<Step> history = historyFor(index, base, now, random);
 
         UUID id = UUID.nameUUIDFromBytes(("seed-candidate-" + index).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         CandidateCreation creation = Candidate.register(id, actor, fixedAt(history.get(0).at()));
@@ -171,7 +171,7 @@ public class SeedPipeline implements ApplicationRunner {
      * The first 24 candidates satisfy the guarantees the demo depends on; the rest are
      * spread across the board so it does not look like a test fixture.
      */
-    private List<Step> historyFor(int index, Instant base, Random random) {
+    private List<Step> historyFor(int index, Instant base, Instant now, Random random) {
         List<Step> steps = new ArrayList<>();
 
         if (index < 10) {
@@ -179,17 +179,25 @@ public class SeedPipeline implements ApplicationRunner {
             steps.add(new Step(Stage.APPLIED, base.minus(Duration.ofDays(24 + index)), null));
             steps.add(new Step(Stage.SCREENING, base.minus(Duration.ofDays(8 + index)), "CV looks relevant"));
         } else if (index < 15) {
-            // Moved to Interview inside the last three days.
+            // Moved to Interview recently, measured from the clock rather than from
+            // midnight, and this group is the only one that needs to be.
             //
-            // Spread over 12 to 48 hours rather than 12 to 60, because the base is midnight
-            // today and the guarantee is relative to now. At a 60-hour offset the oldest of
-            // these is 60 hours before midnight, which is more than three days ago for any
-            // run after noon — so the promise this comment makes held only in the morning.
-            // Capped at 48, the whole group stays inside three days at every hour of the day.
+            // Two demo queries land on it and they disagree about what "recent" means.
+            // "in the last three days" is satisfied by anything under 72 hours. "since
+            // Monday" resolves to midnight on the most recent Monday — which, when today
+            // is Monday, is this morning. Anchored to midnight the newest of these moves
+            // was 12 hours before it, so on one day in seven the query parsed correctly,
+            // ran correctly, and truthfully found nobody. That is a fine answer and a
+            // terrible demo.
+            //
+            // Two hours before now, spread back to 38, keeps both true on any day: the
+            // newest is today for every run after 02:00 UTC, and the oldest is well inside
+            // three days. It is the one place the seed reads the clock instead of the day,
+            // because it is the one place the day is the thing being asked about.
             steps.add(new Step(Stage.APPLIED, base.minus(Duration.ofDays(30)), null));
             steps.add(new Step(Stage.SCREENING, base.minus(Duration.ofDays(12)), "Good CV"));
             steps.add(new Step(
-                    Stage.INTERVIEW, base.minus(Duration.ofHours(12L + (index - 10) * 9L)), "Strong screen"));
+                    Stage.INTERVIEW, now.minus(Duration.ofHours(2L + (index - 10) * 9L)), "Strong screen"));
         } else if (index < 21) {
             // Reached Offer and was then rejected.
             steps.add(new Step(Stage.APPLIED, base.minus(Duration.ofDays(70)), null));

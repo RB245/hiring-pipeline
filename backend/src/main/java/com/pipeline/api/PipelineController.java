@@ -3,6 +3,7 @@ package com.pipeline.api;
 import com.pipeline.application.CandidateReader;
 import com.pipeline.application.JobReader;
 import com.pipeline.application.NoJobConfiguredException;
+import com.pipeline.domain.TransitionRules;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Clock;
@@ -18,11 +19,13 @@ class PipelineController {
 
     private final CandidateReader candidates;
     private final JobReader jobs;
+    private final TransitionRules rules;
     private final Clock clock;
 
-    PipelineController(CandidateReader candidates, JobReader jobs, Clock clock) {
+    PipelineController(CandidateReader candidates, JobReader jobs, TransitionRules rules, Clock clock) {
         this.candidates = candidates;
         this.jobs = jobs;
+        this.rules = rules;
         this.clock = clock;
     }
 
@@ -35,7 +38,7 @@ class PipelineController {
                         column.stage(),
                         column.count(),
                         column.candidates().stream()
-                                .map(summary -> CandidateResponse.of(summary, clock))
+                                .map(summary -> CandidateResponse.of(summary, clock, rules))
                                 .toList()))
                 .toList());
     }

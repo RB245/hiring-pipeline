@@ -89,7 +89,12 @@ record ExplainResponse(
             return switch (value) {
                 case ResolvedValue.StageValue stage -> "the stage " + title(stage.stage().name());
                 case ResolvedValue.StatusValue status -> title(status.status().name());
-                case ResolvedValue.TextValue text -> "matched fuzzily against the name";
+                case ResolvedValue.TextValue text -> switch (text.match()) {
+                    case NAME -> "matched fuzzily against the name";
+                    case IDENTITY -> "matched fuzzily against the name, and exactly against the email";
+                    case LOOSE -> "matched fuzzily against the name, exactly against the email,"
+                            + " and against any name within an edit or two of it";
+                };
                 case ResolvedValue.DateValue date -> date.literal() + " is " + date.instant();
                 case ResolvedValue.AgeValue age -> switch (age.operator()) {
                     case GREATER_THAN -> "the timestamp is before " + age.threshold();

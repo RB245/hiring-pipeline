@@ -20,11 +20,26 @@ public sealed interface ResolvedValue {
     record StatusValue(Status status) implements ResolvedValue {}
 
     /**
-     * Fuzzy text. {@code alsoEmail} is the whole difference between a bare word, which
-     * identifies a person by any of the ways she is written down, and {@code name:},
-     * which means the name and only the name.
+     * Fuzzy text, and how forgivingly it is read. Three shapes rather than a pair of
+     * booleans, because they are three ways of asking the same question and {@code
+     * /explain} has to be able to say which one she asked.
      */
-    record TextValue(String text, boolean alsoEmail) implements ResolvedValue {}
+    record TextValue(String text, Match match) implements ResolvedValue {
+
+        public enum Match {
+            /** {@code name:} — the name, and only the name. */
+            NAME,
+            /** A bare word: any of the ways a person is written down, so the email too. */
+            IDENTITY,
+            /** {@code name_like:} — identity, plus names within an edit or two of it. */
+            LOOSE
+        }
+
+        /** The email is matched for everything except a question explicitly about the name. */
+        public boolean includesEmail() {
+            return match != Match.NAME;
+        }
+    }
 
     /** The literal is kept alongside the instant so {@code /explain} can show its working. */
     record DateValue(String literal, Instant instant) implements ResolvedValue {}

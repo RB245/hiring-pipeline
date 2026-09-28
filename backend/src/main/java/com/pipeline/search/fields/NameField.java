@@ -31,7 +31,7 @@ class NameField implements FieldHandler {
 
     @Override
     public ResolvedValue resolve(Node.Value value, Operator operator, Clock clock) {
-        return new ResolvedValue.TextValue(value.text().strip(), false);
+        return new ResolvedValue.TextValue(value.text().strip(), ResolvedValue.TextValue.Match.NAME);
     }
 
     /**
@@ -41,43 +41,29 @@ class NameField implements FieldHandler {
      */
     @Override
     public Optional<ResolvedValue> bareTerm(String text) {
-        return Optional.of(new ResolvedValue.TextValue(text.strip(), true));
+        return Optional.of(new ResolvedValue.TextValue(text.strip(), ResolvedValue.TextValue.Match.IDENTITY));
     }
 
-    /**
-     * Two arms, both index-backed, which is the only reason this is affordable. The name
-     * arm is candidate_name_matches, a single-expression SQL function that Postgres
-     * inlines so the %> operator stays visible and candidate_name_trgm_idx is still
-     * chosen. The email arm is plain equality against the existing unique index.
-     *
-     * <p>The email comparison is wrapped in citext() rather than left to the driver. A
-     * parameter bound as varchar makes Postgres resolve {@code citext = varchar} as an
-     * ordinary text comparison, which is case-sensitive — so the column's whole point
-     * would be quietly lost and "Priya@Example.com" would stop finding her. Measured, not
-     * guessed: the uncast form returns zero rows for an address that exists.
-     *
-     * <p>Exact rather than fuzzy on the email arm, and that was measured too. Nobody
-     * types a mangled fragment of an address hoping for a fuzzy hit; they paste the whole
-     * thing. Making it fuzzy costs 310ms against 50k rows because the unindexed arm drags
-     * the whole OR into a sequential scan, and a trigram index on the column does not
-     * rescue it — email is citext, so LIKE is the citext operator and gin_trgm_ops never
-     * applies. This form plans to a BitmapOr across two existing indexes at 24ms.
-     */
     @Override
     public Predicate predicate(
             ResolvedValue value, Root<?> candidate, CriteriaQuery<?> query, CriteriaBuilder builder) {
-        ResolvedValue.TextValue text = (ResolvedValue.TextValue) value;
-        Predicate byName = builder.isTrue(builder.function(
-                "candidate_name_matches", Boolean.class, candidate.get("fullName"), builder.literal(text.text())));
-        if (!text.alsoEmail()) {
-            return byName;
-        }
-        // citext(?) is the function-call spelling of ?::citext.
-        return builder.or(
-                byName,
-                builder.equal(
-                        candidate.get("email"),
-                        builder.function("citext", String.class, builder.literal(text.text()))));
+        return Names.matching((ResolvedValue.TextValue) value, candidate, builder);
+    }
+
+    /**
+     * When this finds nobody, {@code name_like:} is the question worth asking instead.
+     *
+     * <p>A field rather than a flag on the request, and that is the point rather than an
+     * implementation detail. A flag would put part of the question outside the query
+     * string, so the search box would stop describing its own results, the interpretation
+     * chips would have nothing to show for it, and {@code /explain} would stop being the
+     * whole truth about what was run. As a field it costs one more handler and touches
+     * neither the lexer nor the parser, so the claim that a new searchable field is one new
+     * class survives it.
+     */
+    @Override
+    public Optional<String> loosensTo() {
+        return Optional.of("name_like");
     }
 
     @Override

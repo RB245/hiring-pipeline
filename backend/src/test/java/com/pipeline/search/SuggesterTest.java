@@ -24,7 +24,7 @@ class SuggesterTest {
     @Test
     void anEmptyBoxOffersEveryField() {
         assertThat(completions("")).containsExactly(
-                "applied:", "before:", "in_stage_for:", "moved_to:", "name:",
+                "applied:", "before:", "in_stage_for:", "moved_to:", "name:", "name_like:",
                 "reached:", "since:", "stage:", "status:");
     }
 
@@ -94,5 +94,6 @@ class SuggesterTest {
     @Test
     void aNewFieldAutocompletesWithoutTouchingThisClass() {
         assertThat(completions("in_")).containsExactly("in_stage_for:");
+        assertThat(completions("name")).containsExactly("name:", "name_like:");
     }
 }

@@ -72,7 +72,8 @@ class SearchErrorTest {
 
         assertThat(thrown.code()).isEqualTo(ErrorCode.UNKNOWN_FIELD);
         assertThat(thrown).hasMessageContaining("frobnicate")
-                .hasMessageContaining("applied, before, in_stage_for, moved_to, name, reached, since, stage, status");
+                .hasMessageContaining(
+                        "applied, before, in_stage_for, moved_to, name, name_like, reached, since, stage, status");
         assertThat(thrown.span()).isEqualTo(new Span(0, 10));
     }
 

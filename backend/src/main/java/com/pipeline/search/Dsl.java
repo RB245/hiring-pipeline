@@ -23,6 +23,16 @@ final class Dsl {
         };
     }
 
+    /**
+     * A single predicate in canonical form, for building a query that was never typed —
+     * the {@code name_like:pryia} a zero-result search offers her. Quoted by the same rule
+     * as everything else here, so a retry on "priya sharma" comes back as something that
+     * parses.
+     */
+    static String predicate(String field, String value) {
+        return field + ":" + value(value);
+    }
+
     /** Whitespace binds tighter than OR, so a disjunction inside a conjunction needs its parens back. */
     private static String underAnd(Node node) {
         return node instanceof Node.Or ? "(" + render(node) + ")" : render(node);

@@ -1,8 +1,8 @@
 package com.pipeline.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.pipeline.application.CandidateSearch;
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.pipeline.application.Suggestion;
 import java.util.List;
 
 /**
@@ -21,8 +21,8 @@ public record CandidatePageResponse(
                         example = "stage:screening in_stage_for:>7d")
                 String query,
         @JsonInclude(JsonInclude.Include.NON_NULL)
-                @Schema(description = "Search only, and only when it found nobody: what to loosen.")
-                List<Relaxation> suggestions) {
+                @Schema(description = "Search only, and only when it found nobody: what to try instead.")
+                List<SuggestionResponse> suggestions) {
 
     static CandidatePageResponse list(List<CandidateResponse> candidates, String nextCursor) {
         return new CandidatePageResponse(candidates, nextCursor, null, null);
@@ -36,20 +36,28 @@ public record CandidatePageResponse(
             List<CandidateResponse> candidates,
             String nextCursor,
             String query,
-            List<CandidateSearch.Relaxation> suggestions) {
+            List<Suggestion> suggestions) {
         return new CandidatePageResponse(
-                candidates, nextCursor, query, suggestions.stream().map(Relaxation::of).toList());
+                candidates, nextCursor, query, suggestions.stream().map(SuggestionResponse::of).toList());
     }
 
-    /** "without in_stage_for:&gt;7d — 6 results". */
-    record Relaxation(
-            @Schema(description = "The condition to drop, in canonical form", example = "in_stage_for:>7d")
-                    String without,
-            @Schema(description = "How many candidates the rest of the query matches", example = "6")
-                    long results) {
+    /**
+     * Something to try instead. {@code query} is a complete DSL string that returns exactly
+     * {@code results} candidates, so acting on a suggestion is putting it in the search box
+     * and resubmitting — the same gesture whether it came from dropping a condition or from
+     * spelling a name more loosely, with no string handling and no need to tell them apart.
+     */
+    record SuggestionResponse(
+            @Schema(description = "The phrase to show her", example = "without in_stage_for:>7d")
+                    String suggestion,
+            @Schema(
+                            description = "Put this in the search box and resubmit",
+                            example = "stage:screening -status:rejected")
+                    String query,
+            @Schema(description = "Exactly how many candidates that query returns", example = "6") long results) {
 
-        static Relaxation of(CandidateSearch.Relaxation relaxation) {
-            return new Relaxation(relaxation.without(), relaxation.results());
+        static SuggestionResponse of(Suggestion suggestion) {
+            return new SuggestionResponse(suggestion.label(), suggestion.query(), suggestion.results());
         }
     }
 }

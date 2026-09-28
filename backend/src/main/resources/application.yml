@@ -49,6 +49,12 @@ pipeline:
     window: ${RATE_LIMIT_WINDOW:1m}
     redis-host: ${REDIS_HOST:localhost}
     redis-port: ${REDIS_PORT:6379}
+  search:
+    # How long the edit-distance retry behind a zero-result suggestion may run before it
+    # is abandoned and the suggestion dropped. Measured at 49ms over a seeded pipeline of
+    # 200 and 3.0s over 50k, so this is twenty times the real cost and well under the
+    # worst one: a pipeline that outgrows the design loses a line of text, not the request.
+    relaxation-budget: ${SEARCH_RELAXATION_BUDGET:1s}
   seed:
     enabled: ${SEED_ENABLED:true}
     candidates: ${SEED_CANDIDATES:200}

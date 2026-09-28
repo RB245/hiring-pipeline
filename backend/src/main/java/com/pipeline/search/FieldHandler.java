@@ -53,6 +53,24 @@ public interface FieldHandler {
     Predicate predicate(ResolvedValue value, Root<?> candidate, CriteriaQuery<?> query, CriteriaBuilder builder);
 
     /**
+     * The field to retry against when a query using this one finds nobody, or empty if
+     * there is no more generous way to ask.
+     *
+     * <p>A field name rather than a wider predicate, and that choice is what makes a
+     * zero-result suggestion actionable. The retry is then an ordinary query in the ordinary
+     * language — {@code name_like:pryia} — so the suggestion can hand back a string she
+     * could have typed, the count can be taken from that same string, and the two cannot
+     * drift. A hook returning a predicate would have left the offer and the thing counted
+     * as separate pieces of code that merely agreed for now.
+     *
+     * <p>It also keeps the search service ignorant: the only thing said here is which field
+     * is more generous than this one, and the field on the other end supplies the SQL.
+     */
+    default Optional<String> loosensTo() {
+        return Optional.empty();
+    }
+
+    /**
      * How a bare word with no field in front of it should be read, or empty if this field
      * does not claim them. At most one handler may; {@link FieldRegistry} checks that at
      * startup rather than letting two fields race for the same input.

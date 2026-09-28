@@ -20,7 +20,8 @@ class FieldRegistryTest {
     @Test
     void everyFieldIsRegisteredUnderTheNameItAnswersTo() {
         assertThat(SearchFixture.registry().fields()).containsExactly(
-                "applied", "before", "in_stage_for", "moved_to", "name", "reached", "since", "stage", "status");
+                "applied", "before", "in_stage_for", "moved_to", "name", "name_like",
+                "reached", "since", "stage", "status");
     }
 
     @Test
@@ -46,7 +47,7 @@ class FieldRegistryTest {
         assertThat(query.dsl()).isEqualTo("stage:interview source:referral");
         Node.And and = (Node.And) query.ast();
         assertThat(((Node.Predicate) and.children().get(1)).resolved())
-                .isEqualTo(new ResolvedValue.TextValue("referral", false));
+                .isEqualTo(new ResolvedValue.TextValue("referral", ResolvedValue.TextValue.Match.NAME));
     }
 
     /**
@@ -79,7 +80,7 @@ class FieldRegistryTest {
 
         @Override
         public ResolvedValue resolve(Node.Value value, Operator operator, Clock clock) {
-            return new ResolvedValue.TextValue(value.text(), false);
+            return new ResolvedValue.TextValue(value.text(), ResolvedValue.TextValue.Match.NAME);
         }
 
         @Override
@@ -115,7 +116,7 @@ class FieldRegistryTest {
 
         @Override
         public Optional<ResolvedValue> bareTerm(String text) {
-            return Optional.of(new ResolvedValue.TextValue(text, false));
+            return Optional.of(new ResolvedValue.TextValue(text, ResolvedValue.TextValue.Match.NAME));
         }
     }
 }

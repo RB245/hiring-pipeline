@@ -60,6 +60,14 @@ tasks.test {
     systemProperty("user.timezone", "UTC")
 }
 
+tasks.bootRun {
+    // The same reason, and the same failure: without it, a developer whose machine is set
+    // to one of the zone ids Postgres dropped cannot start the application at all, while
+    // the tests above pass. The container image is already UTC, so this only ever matters
+    // for running it straight from a workstation.
+    systemProperty("user.timezone", "UTC")
+}
+
 // Leaves a single jar in build/libs so the Dockerfile's COPY glob is unambiguous.
 tasks.jar {
     enabled = false
