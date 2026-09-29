@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, getBoard, transition } from "@/lib/client";
+import { ApiError, createCandidate, getBoard, transition, type NewCandidate } from "@/lib/client";
 import type { Board as BoardData, Candidate, Stage } from "@/lib/schemas";
+import { AddCandidateDialog } from "@/components/add-candidate-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -37,6 +38,34 @@ function moveCard(board: BoardData, candidateId: string, to: Stage): BoardData {
   };
 }
 
+/**
+ * A card for somebody the server has not acknowledged yet. The id is temporary and is
+ * replaced when the real row arrives; nothing can be done to them in the meantime, which
+ * is why the placeholder carries no legal targets.
+ */
+function withNewCandidate(board: BoardData, candidate: NewCandidate, temporaryId: string): BoardData {
+  const placeholder: Candidate = {
+    id: temporaryId,
+    fullName: candidate.fullName,
+    email: candidate.email,
+    phone: candidate.phone ?? null,
+    source: candidate.source ?? null,
+    currentStage: "APPLIED",
+    currentStageSince: new Date().toISOString(),
+    timeInCurrentStage: "PT0S",
+    timeInCurrentStageHumanised: "just now",
+    createdAt: new Date().toISOString(),
+    legalTargets: [],
+  };
+  return {
+    columns: board.columns.map((column) =>
+      column.stage === "APPLIED"
+        ? { ...column, candidates: [placeholder, ...column.candidates], count: column.count + 1 }
+        : column,
+    ),
+  };
+}
+
 export function BoardView({
   initialBoard,
   onOpenCandidate,
@@ -47,6 +76,10 @@ export function BoardView({
   const queries = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
+  const [adding, setAdding] = useState(false);
+  // Held here rather than inside the dialog: the optimistic insert unwinds on failure and
+  // would take a message living in the dialog's own state with it.
+  const [addFailure, setAddFailure] = useState<ApiError | null>(null);
   const grid = useRef<HTMLDivElement>(null);
 
   const board = useQuery({ queryKey: ["board"], queryFn: getBoard, initialData: initialBoard });
@@ -93,6 +126,38 @@ export function BoardView({
       // Whether it worked or not, the server is the authority on where everyone is now.
       queries.invalidateQueries({ queryKey: ["board"] });
     },
+  });
+
+  const add = useMutation({
+    mutationFn: (candidate: NewCandidate) => createCandidate(candidate),
+
+    onMutate: async (candidate) => {
+      await queries.cancelQueries({ queryKey: ["board"] });
+      const previous = queries.getQueryData<BoardData>(["board"]);
+      const temporaryId = `pending-${Date.now()}`;
+      queries.setQueryData<BoardData>(["board"], (current) =>
+        current ? withNewCandidate(current, candidate, temporaryId) : current,
+      );
+      setAddFailure(null);
+      return { previous };
+    },
+
+    onError: (error, _candidate, context) => {
+      // The same rollback the move buttons do: put the board back, then say why. The
+      // dialog stays open with what she typed still in it, because retyping four fields
+      // to fix one of them is the worst possible answer to a duplicate email.
+      if (context?.previous) {
+        queries.setQueryData(["board"], context.previous);
+      }
+      setAddFailure(error instanceof ApiError ? error : null);
+    },
+
+    onSuccess: () => {
+      setAdding(false);
+      setAddFailure(null);
+    },
+
+    onSettled: () => queries.invalidateQueries({ queryKey: ["board"] }),
   });
 
   /**
@@ -144,6 +209,25 @@ export function BoardView({
           {notice}
         </div>
       )}
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAdding(true)}>
+          Add candidate
+        </Button>
+      </div>
+
+      <AddCandidateDialog
+        open={adding}
+        onOpenChange={(open) => {
+          setAdding(open);
+          if (!open) {
+            setAddFailure(null);
+          }
+        }}
+        onSubmit={(candidate) => add.mutate(candidate)}
+        pending={add.isPending}
+        failure={addFailure}
+      />
 
       <div
         ref={grid}

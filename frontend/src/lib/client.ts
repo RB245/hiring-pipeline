@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   Board,
+  Candidate,
   CandidatePage,
   Explain,
   Problem,
@@ -52,6 +53,26 @@ export function getCandidates(query: string, limit = 50): Promise<CandidatePage>
     params.set("q", query);
   }
   return call(`/api/v1/candidates?${params}`, CandidatePage);
+}
+
+/**
+ * The four things a recruiter knows when somebody applies. Everything else about a
+ * candidate — their stage, when they got there, what they have reached — is the
+ * pipeline's to decide, not a form's.
+ */
+export type NewCandidate = {
+  fullName: string;
+  email: string;
+  phone?: string;
+  source?: string;
+};
+
+export function createCandidate(candidate: NewCandidate): Promise<Candidate> {
+  return call("/api/v1/candidates", Candidate, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(candidate),
+  });
 }
 
 export function getEvents(candidateId: string): Promise<StageEvent[]> {

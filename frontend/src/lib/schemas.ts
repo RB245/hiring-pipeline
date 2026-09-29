@@ -151,6 +151,8 @@ export const Problem = z.object({
   code: z.string().optional(),
   span: Span.optional(),
   didYouMean: z.array(z.string()).optional(),
+  /** Duplicate-email failures: which field the message belongs against. */
+  field: z.string().optional(),
   /** Illegal-transition failures only. */
   legalTargets: z.array(Stage).optional(),
   /** Stale-view failures only: what this tab believed, and what is actually true. */

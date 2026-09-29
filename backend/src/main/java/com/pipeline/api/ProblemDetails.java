@@ -71,9 +71,36 @@ class ProblemDetails extends ResponseEntityExceptionHandler {
      */
     @ExceptionHandler({OptimisticLockingFailureException.class, DataIntegrityViolationException.class})
     ResponseEntity<ProblemDetail> lostTheRace(RuntimeException e, HttpServletRequest request) {
+        // Both arrive as the same exception type and mean entirely different things to
+        // whoever is reading the message. "Somebody else got there first, re-read and try
+        // again" is right for a lost optimistic lock and actively misleading for an email
+        // that is already on the board — she would re-read, see nothing had changed, and
+        // try the same address again.
+        if (isDuplicateEmail(e)) {
+            ProblemDetail problem = problem(HttpStatus.CONFLICT, "duplicate-email", "Already on the board",
+                    "Somebody with that email address is already in this pipeline.", request);
+            // Named so a form can attach the message to the field that caused it rather
+            // than showing it somewhere the eye has to go looking.
+            problem.setProperty("field", "email");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(problem(HttpStatus.CONFLICT, "concurrent-modification", "Concurrent modification",
                         "The candidate was modified by another request. Re-read and try again.", request));
+    }
+
+    /**
+     * By constraint name, which is the only thing that actually identifies which rule was
+     * broken. Matching on the message text would break the first time Postgres reworded
+     * it or the locale changed.
+     */
+    private static boolean isDuplicateEmail(Throwable failure) {
+        for (Throwable cause = failure; cause != null && cause != cause.getCause(); cause = cause.getCause()) {
+            if (cause.getMessage() != null && cause.getMessage().contains("candidate_job_email_uq")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @ExceptionHandler(MalformedCursorException.class)

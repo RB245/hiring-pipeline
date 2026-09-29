@@ -18,15 +18,16 @@ const SESSION_COOKIE = "pipeline_session";
 /**
  * Exactly what the three screens need, and nothing adjacent.
  *
- * <p>Notably absent: POST /candidates, which would let any browser create people, and
- * /admin/rebuild-projections, which would let it rewrite every projection in the database.
- * Both are real endpoints with real authority; neither is anything this UI does, so neither
- * is reachable from it. An allowlist rather than a denylist so that the next endpoint added
- * to the backend is closed until somebody opens it.
+ * <p>Notably absent: /admin/rebuild-projections, which would let any browser rewrite every
+ * projection in the database. It is a real endpoint with real authority and nothing this UI
+ * does, so it is not reachable from it. An allowlist rather than a denylist, so the next
+ * endpoint added to the backend is closed until somebody opens it — POST /candidates was
+ * closed here until the board grew a way to add one.
  */
 const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "GET", path: /^\/api\/v1\/pipeline$/ },
   { method: "GET", path: /^\/api\/v1\/candidates$/ },
+  { method: "POST", path: /^\/api\/v1\/candidates$/ },
   { method: "GET", path: /^\/api\/v1\/candidates\/[0-9a-f-]{36}$/ },
   { method: "GET", path: /^\/api\/v1\/candidates\/[0-9a-f-]{36}\/events$/ },
   { method: "POST", path: /^\/api\/v1\/candidates\/[0-9a-f-]{36}\/transitions$/ },

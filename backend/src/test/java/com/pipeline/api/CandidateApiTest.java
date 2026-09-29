@@ -1,5 +1,6 @@
 package com.pipeline.api;
 
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.startsWith;
@@ -87,6 +88,27 @@ class CandidateApiTest extends ApiTest {
         mvc.perform(get("/api/v1/pipeline"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.columns[0].candidates[0].legalTargets").exists());
+    }
+
+    /**
+     * A duplicate email and a lost optimistic lock arrive as the same exception and must
+     * not come out as the same message. This one has to be readable enough to put next to
+     * the email field in a form, which is why it names the field.
+     */
+    @Test
+    void anEmailAlreadyOnTheBoardSaysSoRatherThanBlamingConcurrency() throws Exception {
+        String email = "duplicate-%s@example.com".formatted(UUID.randomUUID());
+        String body = """
+                {"fullName": "First Arrival", "email": "%s", "source": "referral"}
+                """.formatted(email);
+        mvc.perform(post("/api/v1/candidates").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+
+        mvc.perform(post("/api/v1/candidates").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value(endsWith("duplicate-email")))
+                .andExpect(jsonPath("$.field").value("email"))
+                .andExpect(jsonPath("$.detail").value("Somebody with that email address is already in this pipeline."));
     }
 
     @Test
