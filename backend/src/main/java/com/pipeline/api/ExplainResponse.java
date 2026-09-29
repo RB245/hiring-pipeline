@@ -89,6 +89,7 @@ record ExplainResponse(
             return switch (value) {
                 case ResolvedValue.StageValue stage -> "the stage " + title(stage.stage().name());
                 case ResolvedValue.StatusValue status -> title(status.status().name());
+                case ResolvedValue.ExactValue exact -> "exactly \"" + exact.text() + "\"";
                 case ResolvedValue.TextValue text -> switch (text.match()) {
                     case NAME -> "matched fuzzily against the name";
                     case IDENTITY -> "matched fuzzily against the name, and exactly against the email";

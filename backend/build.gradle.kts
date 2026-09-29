@@ -1,5 +1,6 @@
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.4.1"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -58,6 +59,42 @@ tasks.test {
     // forwarding a legacy zone id such as Asia/Calcutta, which Postgres 16 refuses at
     // connection time.
     systemProperty("user.timezone", "UTC")
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports { xml.required = true }
+}
+
+/**
+ * Coverage is gated on two packages and nowhere else, on purpose.
+ *
+ * The domain is where the rules live and the search packages are where the logic is; both
+ * are pure enough that a gap in them means a behaviour nobody exercised. Everywhere else
+ * is adapters, DTOs and wiring, where a coverage number measures how much Spring was
+ * started rather than how much was tested — chasing it would buy tests that assert a
+ * getter returns what was passed to it.
+ *
+ * Line ratio rather than instruction: it is the number a human can check against the HTML
+ * report without wondering how bytecode was counted.
+ */
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    violationRules {
+        rule {
+            element = "PACKAGE"
+            includes = listOf("com.pipeline.domain", "com.pipeline.search", "com.pipeline.search.fields")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.85".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
 tasks.bootRun {

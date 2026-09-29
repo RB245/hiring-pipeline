@@ -1,0 +1,17 @@
+{
+  "name": "pipeline-docs-tooling",
+  "private": true,
+  "type": "module",
+  "description": "Regenerates the two documentation artefacts that cannot be written by hand: the demo GIF and the architecture PDF. Kept out of the application's package.json so that lists only what the application needs.",
+  "scripts": {
+    "record": "node record-demo.mjs",
+    "pdf": "node render-pdf.mjs"
+  },
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^12.0.0",
+    "gifenc": "^1.0.3",
+    "marked": "^17.0.0",
+    "pngjs": "^7.0.0",
+    "puppeteer-core": "^24.0.0"
+  }
+}

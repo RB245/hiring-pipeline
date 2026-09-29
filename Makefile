@@ -1,4 +1,4 @@
-.PHONY: up down test test-frontend frontend
+.PHONY: up down test test-frontend frontend docs
 
 up:
 	docker compose up --build
@@ -16,3 +16,8 @@ test-frontend:
 
 frontend:
 	cd frontend && npm run dev
+
+# Regenerates the two artefacts that cannot be written by hand. The GIF needs the stack
+# running, because it records the real application rather than a mockup.
+docs:
+	cd docs/tooling && npm install && npm run pdf && npm run record

@@ -25,7 +25,7 @@ class SuggesterTest {
     void anEmptyBoxOffersEveryField() {
         assertThat(completions("")).containsExactly(
                 "applied:", "before:", "in_stage_for:", "moved_to:", "name:", "name_like:",
-                "reached:", "since:", "stage:", "status:");
+                "reached:", "since:", "source:", "stage:", "status:");
     }
 
     @Test

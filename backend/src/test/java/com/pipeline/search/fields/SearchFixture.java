@@ -33,7 +33,8 @@ public final class SearchFixture {
                 new StatusField(),
                 new NameField(),
                 new NameLikeField(),
-                new AppliedField());
+                new AppliedField(),
+                new SourceField());
     }
 
     public static FieldRegistry registry() {

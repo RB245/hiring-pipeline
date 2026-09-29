@@ -21,14 +21,14 @@ class FieldRegistryTest {
     void everyFieldIsRegisteredUnderTheNameItAnswersTo() {
         assertThat(SearchFixture.registry().fields()).containsExactly(
                 "applied", "before", "in_stage_for", "moved_to", "name", "name_like",
-                "reached", "since", "stage", "status");
+                "reached", "since", "source", "stage", "status");
     }
 
     @Test
     void twoHandlersClaimingOneFieldFailAtStartupRatherThanAtQueryTime() {
-        assertThatThrownBy(() -> new FieldRegistry(List.of(new SourceField(), new SourceField())))
+        assertThatThrownBy(() -> new FieldRegistry(List.of(new CohortField(), new CohortField())))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("source");
+                .hasMessageContaining("cohort");
     }
 
     /**
@@ -39,15 +39,15 @@ class FieldRegistryTest {
     @Test
     void anEntirelyNewFieldWorksWithoutTouchingAnythingElse() {
         List<FieldHandler> handlers = new ArrayList<>(SearchFixture.handlers());
-        handlers.add(new SourceField());
+        handlers.add(new CohortField());
         SearchQueryParser parser = new SearchQueryParser(new FieldRegistry(handlers), SearchFixture.CLOCK);
 
-        SearchQuery query = parser.parse("stage:interview source:referral");
+        SearchQuery query = parser.parse("stage:interview cohort:spring");
 
-        assertThat(query.dsl()).isEqualTo("stage:interview source:referral");
+        assertThat(query.dsl()).isEqualTo("stage:interview cohort:spring");
         Node.And and = (Node.And) query.ast();
         assertThat(((Node.Predicate) and.children().get(1)).resolved())
-                .isEqualTo(new ResolvedValue.TextValue("referral", ResolvedValue.TextValue.Match.NAME));
+                .isEqualTo(new ResolvedValue.TextValue("spring", ResolvedValue.TextValue.Match.NAME));
     }
 
     /**
@@ -64,18 +64,23 @@ class FieldRegistryTest {
 
     @Test
     void anUnregisteredFieldIsRejectedWithTheListOfRealOnes() {
-        assertThat(SearchFixture.registry().find("source")).isEmpty();
+        assertThat(SearchFixture.registry().find("cohort")).isEmpty();
     }
 
     /**
      * Everything a new searchable field has to be, and nothing else: a name, how to read
      * its value, how to filter on it, and what to say when she leaves the value off.
+     *
+     * <p>Called "cohort" because it has to be a field that does not exist. It was "source"
+     * until file 10 made source real, at which point this test started failing — not
+     * wrongly, but because the registry correctly refused two handlers claiming one name.
+     * A hypothetical field has to stay hypothetical to be worth anything.
      */
-    private static class SourceField implements FieldHandler {
+    private static class CohortField implements FieldHandler {
 
         @Override
         public String field() {
-            return "source";
+            return "cohort";
         }
 
         @Override
@@ -91,17 +96,17 @@ class FieldRegistryTest {
 
         @Override
         public String valueKind() {
-            return "a source";
+            return "a cohort";
         }
 
         @Override
         public List<String> examples() {
-            return List.of("referral");
+            return List.of("spring");
         }
     }
 
     /** Fields that both want bare words, which the registry must refuse to assemble. */
-    private static final class GreedyField extends SourceField {
+    private static final class GreedyField extends CohortField {
 
         private final String name;
 

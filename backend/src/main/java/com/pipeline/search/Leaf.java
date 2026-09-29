@@ -65,6 +65,9 @@ public record Leaf(FieldHandler handler, ResolvedValue value, boolean negated) {
         return switch (value) {
             case ResolvedValue.StageValue stage -> handler.field() + is + title(stage.stage().name());
             case ResolvedValue.StatusValue status -> handler.field() + is + title(status.status().name());
+            // Not title-cased: a label is reported as it is stored, and "Careers-page"
+            // would be this layer editing data it did not choose.
+            case ResolvedValue.ExactValue exact -> handler.field() + is + exact.text();
             case ResolvedValue.TextValue text ->
                     handler.field() + (negated ? " !~ " : " ~ ") + "'" + text.text() + "'";
             case ResolvedValue.AgeValue age ->

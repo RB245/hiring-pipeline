@@ -20,6 +20,18 @@ public sealed interface ResolvedValue {
     record StatusValue(Status status) implements ResolvedValue {}
 
     /**
+     * A label, compared exactly.
+     *
+     * <p>Distinct from {@link TextValue} because the difference is not cosmetic. Text is
+     * fuzzy and identifies a person, so it feeds the nameMatch term of the ranking and is
+     * explained as "name ~ 'sharam' (0.80)". A label is a value someone picked from a short
+     * list; matching it approximately would be wrong, and scoring a person's name against
+     * it would be nonsense. Reusing TextValue for {@code source:referral} would quietly do
+     * both — every result would carry a name score against the word "referral".
+     */
+    record ExactValue(String text) implements ResolvedValue {}
+
+    /**
      * Fuzzy text, and how forgivingly it is read. Three shapes rather than a pair of
      * booleans, because they are three ways of asking the same question and {@code
      * /explain} has to be able to say which one she asked.

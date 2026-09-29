@@ -143,10 +143,14 @@ export function SearchBar({
     retry: false,
   });
 
+  // Keyed on the settled text, like the parse above. Keyed on the raw text it fired once
+  // per keystroke, and a fifty-character sentence spent the backend's whole 60-a-minute
+  // search budget before she had finished typing it — the debounce was there but this
+  // query was not behind it.
   const completions = useQuery({
-    queryKey: ["suggest", text],
-    queryFn: () => suggest(text),
-    enabled: completionsOpen && text.length > 0,
+    queryKey: ["suggest", settled],
+    queryFn: () => suggest(settled),
+    enabled: completionsOpen && settled.length > 0,
     retry: false,
   });
 
@@ -161,7 +165,10 @@ export function SearchBar({
   const tokenSpans = current && explained ? leafSpans(explained.ast) : [];
   const chips = current && explained ? interpret(explained.ast) : [];
 
-  const options = completions.data?.completions ?? [];
+  // Same staleness rule as the highlighting, and for the same reason: `replacing` is a
+  // range into the text that was sent, so splicing a completion into text she has since
+  // typed more of would land it in the wrong place.
+  const options = current ? (completions.data?.completions ?? []) : [];
 
   function accept(index: number) {
     const completion = options[index];

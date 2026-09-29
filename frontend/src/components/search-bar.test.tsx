@@ -172,6 +172,29 @@ describe("SearchBar", () => {
   });
 
   /**
+   * Both server calls sit behind the one debounce, and this is the test that says so.
+   *
+   * <p>They did not. The parse was debounced and the completions were keyed on the raw
+   * text, so autocomplete fired once per keystroke — typing a fifty-character sentence
+   * spent the backend's whole sixty-a-minute search budget before the sentence was
+   * finished, and the box answered with a rate-limit error instead of results. It was
+   * found by watching the app, not by any test here, because every test typed into a
+   * mock that never complained.
+   */
+  it("asks the server once the typing settles, not once per keystroke", async () => {
+    explainMock.mockRejectedValue(unknownStage());
+
+    render(<Harness />);
+    await userEvent.type(box(), "stage:screening in_st", { delay: 10 });
+    await waitFor(() => expect(explainMock).toHaveBeenCalled());
+
+    // Twenty-one characters. Anything near that many calls means a query escaped the
+    // debounce; a couple is the settle plus whatever was in flight as it landed.
+    expect(suggestMock.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(explainMock.mock.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  /**
    * The failure this guards against is subtle and would be invisible in a screenshot: a
    * stale answer describing the previous keystroke, drawn over the current text, underlines
    * whatever characters happen to sit at those offsets now.

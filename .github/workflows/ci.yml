@@ -16,8 +16,34 @@ jobs:
       # one on every run.
       - uses: gradle/actions/wrapper-validation@v4
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew build
+
+      # `build` runs the whole suite against a real Postgres via Testcontainers — Docker
+      # is present on ubuntu-latest, so nothing needs starting here — and `check` also
+      # pulls in the two below.
+      #
+      # The backend's lint is architectural rather than stylistic: ArchUnit fails the
+      # build if the domain reaches for Spring, JPA or an outer layer, if a use case
+      # reaches for an adapter, or if the query pipeline learns a field's name. There is
+      # deliberately no Java formatter; adding one now would reformat every file in the
+      # repository to satisfy a tool that has never had an opinion about it, which is
+      # churn rather than a check. See the README.
+      - name: Build, test and verify architecture
+        run: ./gradlew build
         working-directory: backend
+
+      # Gated at 85% on the domain and the search packages only. Everywhere else is
+      # adapters and wiring, where the number measures how much Spring was started.
+      - name: Coverage gate (domain and search)
+        run: ./gradlew jacocoTestCoverageVerification
+        working-directory: backend
+
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/build/reports/jacoco/test/html
+          retention-days: 7
 
   frontend:
     runs-on: ubuntu-latest
@@ -32,11 +58,20 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm test
-      # The build is the only check that exercises the server/client split: an accidental
-      # import of the API key module from a client component fails here and nowhere else.
-      - run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npm test
+
+      # The only check that exercises the server/client split: an accidental import of
+      # the API-key module from a client component fails here and nowhere else, because
+      # `server-only` is a build-time error rather than a runtime one.
+      - name: Build
+        run: npm run build
         env:
           API_KEY: build-time-placeholder

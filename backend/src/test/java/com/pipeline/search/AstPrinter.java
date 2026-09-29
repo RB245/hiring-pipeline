@@ -33,6 +33,7 @@ final class AstPrinter {
         return switch (value) {
             case ResolvedValue.StageValue stage -> stage.stage().name().toLowerCase();
             case ResolvedValue.StatusValue status -> status.status().name().toLowerCase();
+            case ResolvedValue.ExactValue exact -> exact.text();
             case ResolvedValue.TextValue text -> "\"" + text.text() + "\"";
             case ResolvedValue.DateValue date -> date.literal();
             case ResolvedValue.AgeValue age -> age.literal();

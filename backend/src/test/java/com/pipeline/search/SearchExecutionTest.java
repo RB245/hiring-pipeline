@@ -131,6 +131,103 @@ class SearchExecutionTest {
         assertThat(idsFor(row.query())).as("%s found nobody", row.query()).isNotEmpty();
     }
 
+    /**
+     * The open/closed claim, run the whole way down rather than at the parser boundary.
+     *
+     * <p>File 07 already proved a new field parses. That was the cheaper half: since file
+     * 08 a handler also has to produce a Criteria predicate, so this asserts the rows that
+     * come back through parse, SQL and the ranking — against the same question written out
+     * independently, like the eight acceptance queries above.
+     */
+    @Test
+    void aFieldAddedLastFiltersOnAColumnNothingHadAskedAboutBefore() throws SQLException {
+        assertThat(idsFor("source:referral"))
+                .containsExactlyInAnyOrderElementsOf(idsMatching("source = 'referral'"))
+                .isNotEmpty();
+    }
+
+    /** And it composes with the fields that were there first, without either knowing. */
+    @Test
+    void andComposesWithEveryOtherField() throws SQLException {
+        assertThat(idsFor("source:referral stage:screening -status:rejected"))
+                .containsExactlyInAnyOrderElementsOf(
+                        idsMatching("source = 'referral' AND current_stage = 'SCREENING'"
+                                + " AND NOT (current_stage = 'REJECTED')"))
+                .isNotEmpty();
+    }
+
+    /**
+     * A label is not a name. Reusing the fuzzy text value for source would have scored
+     * every candidate's name against the word "referral" and explained the match as
+     * "source ~ 'referral' (0.00)", which is why it resolves to its own exact value.
+     */
+    @Test
+    void aSourceIsExplainedAsALabelRatherThanAFuzzyNameMatch() {
+        List<SearchHit> hits = hits("source:referral");
+
+        assertThat(hits).isNotEmpty();
+        assertThat(hits).allSatisfy(hit -> assertThat(hit.matchedOn()).containsExactly("source = referral"));
+    }
+
+    /**
+     * The other direction of the age comparison, which until now nothing exercised.
+     *
+     * <p>Worth its own test because the code carrying it says in a comment that inverting
+     * it is the easy mistake: the operator applies to how old the thing is, not to its
+     * timestamp, so "less than 30 days" is a created_at <em>after</em> the threshold. A
+     * suite that only ever asked for "more than" would have passed with the two arms
+     * swapped.
+     */
+    @Test
+    void anAgeReadsBackwardsInBothDirections() throws SQLException {
+        assertThat(idsFor("applied:<30d"))
+                .containsExactlyInAnyOrderElementsOf(idsMatching("created_at > " + AT + " - interval '30 days'"))
+                .isNotEmpty();
+        assertThat(idsFor("applied:>30d"))
+                .containsExactlyInAnyOrderElementsOf(idsMatching("created_at < " + AT + " - interval '30 days'"))
+                .isNotEmpty();
+    }
+
+    /** And the two halves partition the pipeline, which is the property that catches an overlap. */
+    @Test
+    void theTwoDirectionsBetweenThemAccountForEverybody() {
+        assertThat(idsFor("applied:<30d").size() + idsFor("applied:>30d").size())
+                .isEqualTo(idsFor("-name:zzzzzznobody").size());
+    }
+
+    @Test
+    void inStageForReadsBackwardsTheSameWay() throws SQLException {
+        // Not narrowed to one stage: nobody in Screening has been there under a week, so
+        // that form would compare two empty sets and pass without asserting anything.
+        assertThat(idsFor("in_stage_for:<7d"))
+                .containsExactlyInAnyOrderElementsOf(idsMatching(
+                        "NOT is_terminal AND current_stage_since > " + AT + " - interval '7 days'"))
+                .isNotEmpty();
+    }
+
+    /** The upper bound on a move, which only the lower bound had been asked for. */
+    @Test
+    void movedToCanBeBoundedFromAbove() throws SQLException {
+        assertThat(idsFor("moved_to:interview before:today"))
+                .containsExactlyInAnyOrderElementsOf(idsMatching(
+                        "EXISTS (SELECT 1 FROM stage_event e WHERE e.candidate_id = c.id"
+                                + " AND e.to_stage = 'INTERVIEW'"
+                                + " AND e.occurred_at < timestamptz '2025-03-01T00:00:00Z')"))
+                .isNotEmpty();
+    }
+
+    /** Both ends at once, which is the only form that can get the bounds the wrong way round. */
+    @Test
+    void andFromBothEndsAtOnce() throws SQLException {
+        assertThat(idsFor("moved_to:interview since:\"last week\" before:today"))
+                .containsExactlyInAnyOrderElementsOf(idsMatching(
+                        "EXISTS (SELECT 1 FROM stage_event e WHERE e.candidate_id = c.id"
+                                + " AND e.to_stage = 'INTERVIEW'"
+                                + " AND e.occurred_at >= timestamptz '2025-02-17T00:00:00Z'"
+                                + " AND e.occurred_at < timestamptz '2025-03-01T00:00:00Z')"))
+                .isNotEmpty();
+    }
+
     /** The demo, and the reason the threshold is 0.5 rather than pg_trgm's 0.6. */
     @Test
     void sharamFindsPriyaSharma() {
